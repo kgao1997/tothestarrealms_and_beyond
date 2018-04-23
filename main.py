@@ -58,7 +58,7 @@ class Ship: #initialize card parameters for ship type cards
 
 class Base: #initialize card parameters for a base
     def __init__(self, turn_function, discard_function = Function(FuncName.NONE), faction_function = Function(FuncName.NONE), card_cost = 0, card_name = "default name", card_faction = Faction.UNALIGNED, card_description = "default_description", card_shield = 0):
-        self.turn_function = turn_function #turn function is the effect that you get when played, and the function that is applied each turn
+        self.play_function = turn_function #turn function is the effect that you get when played, and the function that is applied each turn
         self.discard_function = discard_function #card function called when card is discarded from the board
         self.faction_function = faction_function #function to be applied (per turn) for faction bonus
         self.card_name = card_name
@@ -69,7 +69,7 @@ class Base: #initialize card parameters for a base
 
 class Landscape: #initialize card_parameters for landscape cards
     def __init__(self, act_function, discard_function = Function(FuncName.NONE), faction_function = Function(FuncName.NONE), card_cost = 0, card_name = "default name", card_faction = Faction.UNALIGNED, card_description = "default description", card_shield = 0):
-        self.act_function = act_function #function that is called as the turn activation for landscapes
+        self.play_function = act_function #function that is called as the turn activation for landscapes
         self.discard_function = discard_function #function called when card is discarded
         self.faction_function = faction_function #function to be applied (per turn) for faction bonus
         self.card_cost = card_cost
@@ -84,7 +84,7 @@ viper = Ship(Function(FuncName.ADD_COMBAT, effect=1), card_name = 'Viper', card_
 explorer = Ship(Function(FuncName.ADD_TRADE, effect=2), discard_function = Function(FuncName.ADD_COMBAT, 2), card_cost = 2, card_name = 'Explorer', card_faction = Faction.UNALIGNED)
 
 blob_fighter = Ship(Function(FuncName.ADD_COMBAT, effect=3), faction_function=Function(FuncName.DRAW_CARDS, effect=1), card_cost = 1, card_name = 'Blob Fighter', card_faction = Faction.BLOB)
-battle_pod = Ship(Function(FuncName.ADD_COMBAT, effect=4), faction_function=Function(FuncName.ADD_COMBAT, effect=2), card_cost = 2, card_name = 'Battle Pod', card_faction = Faction.BLOB)
+battle_pod = Ship(Function(FuncName.AND, func1=Function(FuncName.ADD_COMBAT, effect=4), func2=Function(FuncName.SCRAP_TRADE_ROW, effect=1)), faction_function=Function(FuncName.ADD_COMBAT, effect=2), card_cost = 2, card_name = 'Battle Pod', card_faction = Faction.BLOB)
 trade_pod = Ship(Function(FuncName.ADD_TRADE, effect=3), faction_function=Function(FuncName.ADD_COMBAT, effect=2), card_cost = 2, card_name = 'Trade Pod', card_faction = Faction.BLOB)
 blob_wheel = Landscape(Function(FuncName.ADD_COMBAT, effect=1), discard_function=Function(FuncName.ADD_TRADE, effect=3), card_cost=3, card_name='Blob Wheel', card_faction=Faction.BLOB, card_shield=5)
 ram = Ship(Function(FuncName.ADD_COMBAT, effect=5), faction_function=Function(FuncName.ADD_COMBAT, effect=2), discard_function=Function(FuncName.ADD_TRADE, effect=3), card_cost = 3, card_name = 'Ram', card_faction = Faction.BLOB)
@@ -174,22 +174,127 @@ class Action:
         self.action_name = act_name # from ActName enum
         self.target = target # for when an action requires targetting a card
 
+# true if player has a base in play
+def has_base(player):
+    val = False
+    for card in player.in_play:
+        if isinstance(card, Base):
+            val = True
+    return val
+
+# return bools (blob, trade, mach, star), each true if there is a faction bonus for the faction (i.e. >1 cards in play)
+def faction_bonus(player):
+    blob_num = 0
+    trade_num = 0
+    mach_num = 0
+    star_num = 0
+    for card in player.in_play:
+        if card.card_faction == Faction.BLOB or card.card_faction == Faction.ALL: 
+            blob_num = blob_num + 1
+        if card.card_faction == Faction.TRADE_FED or card.card_faction == Faction.ALL:
+            trade_num = trade_num + 1
+        if card.card_faction == Faction.MACH_CULT or card.card_faction == Faction.ALL:
+            mach_num = mach_num + 1
+        if card.card_faction == Faction.STAR_EMP or card.card_faction == Faction.ALL:
+            star_num = star_num + 1
+    blob_bonus = False
+    trade_bonus = False
+    mach_bonus = False
+    star_bonus = False
+    if blob_num > 1:
+        blob_bonus = True
+    if trade_num > 1:
+        trade_bonus = True
+    if mach_num > 1:
+        mach_bonus = True
+    if star_num > 1:
+        star_bonus = True
+    return (blob_bonus, trade_bonus, mach_bonus, star_bonus)
+
+# return a list of valid functions, given a player state (not including scrap effects)
+def valid_functions(player):
+    (blob_bonus, trade_bonus, mach_bonus, star_bonus) = faction_bonus(player)
+    valid_functions = []
+    for card in player.in_play:
+        if card.play_function.function_name != FuncName.NONE:
+            valid_functions.append(card.play_function)
+        if card.play_function.func1 is not None:
+            valid_functions.append(card.play_function.func1)
+        if card.play_function.func2 is not None:
+            valid_functions.append(card.play_function.func2)
+        if card.play_function.func3 is not None:
+            valid_functions.append(card.play_function.func3)
+        if (card.card_faction == Faction.BLOB and blob_bonus) or (card.card_faction == Faction.TRADE_FED and trade_bonus) or (card.card_faction == Faction.MACH_CULT and mach_bonus) or (card.card_faction == Faction.STAR_EMP and star_bonus):
+            if card.faction_function.function_name != FuncName.NONE:
+                valid_functions.append(card.faction_function)
+            if card.faction_function.func1 is not None:
+                valid_functions.append(card.faction_function.func1)
+            if card.faction_function.func2 is not None:
+                valid_functions.append(card.faction_function.func2)
+            if card.faction_function.func3 is not None:
+                valid_functions.append(card.faction_function.func3)
+    #for f in valid_functions:
+    #    print (f.function_name, f.effect)
+    return valid_functions
+
 # given a game state, list the possible actions of the current player
 def list_actions(state):
     curr_player = state.player_list[state.current_player]
+    opp_player = state.player_list[state.current_player + 1 % 2]
     valid_actions = []
-    for card in curr_player.hand:
+    for card in curr_player.hand:  # can play any card in your hand
         valid_actions.append(Action(ActName.PLAY_CARD, card))
-    for card in state.trade_row:
+    for card in state.trade_row:   # can buy any trade row card that you can afford
         if (curr_player.trade >= card.card_cost):   # use polymorphism for card_cost field?
             valid_actions.append(Action(ActName.BUY_CARD, card))
-    for action in valid_actions:
-        print(action.action_name, action.target.card_name)
+    if curr_player.combat > 0:   # can attack base if in play, or opponent if no base in play
+        if has_base(opp_player):
+            for card in opp_player.in_play:
+                if isinstance(card, Base):
+                    valid_actions.append(Action(ActName.ATTACK, card))
+        else:
+            for card in opp_player.in_play:
+                if isinstance(card, Landscape):
+                    valid_actions.append(Action(ActName.ATTACK, card))
+            valid_actions.append(Action(ActName.ATTACK, 'Opponent'))
+    for card in curr_player.in_play:   # can scrap any card with a discard effect
+        if card.discard_function.function_name != FuncName.NONE:
+            valid_actions.append(Action(ActName.SCRAP_EFFECT, card))
+    valid_funcs = valid_functions(curr_player)
+    for f in valid_funcs:   # special effects: scrap a card in the trade row, destroy target base, etc.
+        if f.function_name == FuncName.SCRAP_TRADE_ROW:
+            for card in state.trade_row:
+                valid_actions.append(Action(ActName.SCRAP_TRADE_ROW, card))
+        elif f.function_name == FuncName.DESTROY_BASE:
+            for card in opp_player.in_play:
+                if isinstance(card, Base) or isinstance(card, Landscape):
+                    valid_actions.append(Action(ActName.DESTROY_BASE, card))
+        elif f.function_name == FuncName.ACQUIRE_FREE_SHIP:
+            for card in state.trade_row:
+                valid_actions.append(Action(ActName.ACQUIRE_FREE_SHIP, card))
+        elif f.function_name == FuncName.SCRAP_HAND_DISC:
+            for card in curr_player.hand:
+                valid_actions.append(Action(ActName.SCRAP_HAND_DISC, card))
+            for card in curr_player.discard:
+                valid_actions.append(Action(ActName.SCRAP_HAND_DISC, card))
+        elif f.function_name == FuncName.COPY_SHIP:
+            for card in curr_player.in_play:
+                if isinstance(card, Ship) and card != stealth_needle:
+                    valid_actions.append(Action(ActName.COPY_SHIP, card))
+    # TODO: activate effect for a choice of effects
+    # TODO: more complex functions, i.e. scrap->draw, draw->scrap, disc->draw
+    valid_actions.append(Action(ActName.END_TURN))
+    for action in valid_actions:   # print actions (for debugging)
+        if isinstance(action.target, Ship) or isinstance(action.target, Landscape) or isinstance(action.target, Base):   # polymorphism pls
+            print(action.action_name, action.target.card_name)
+        else:
+            print(action.action_name, action.target)
 
-p0 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, scout, viper], in_play = [], hand = [scout, scout, viper], combat = 0, trade = 3, discard = [])
-p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper], in_play = [], hand = [], combat = 0, trade = 0, discard = [])
+p0 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, scout, viper], in_play = [scout, stealth_needle], hand = [scout, scout, viper], combat = 3, trade = 3, discard = [junkyard])
+p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper], in_play = [barter_world], hand = [], combat = 0, trade = 0, discard = [])
 state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[patrol_mech, blob_wheel, imperial_frigate, missile_bot, embassy_yacht], deck=[])
 
+valid_functions(p0)
 list_actions(state_example)
 
 # TODO: given a state and an action, return a new state

@@ -43,7 +43,7 @@ class Function:
 
 class Ship: #initialize card parameters for ship type cards
     #possibly can unify card_trade, card_combat into the play_function
-    def __init__(self, play_function, discard_function = Function(FuncName.NONE), faction_function = Function(FuncName.NONE), card_cost = 0, card_name = "default card name", card_faction = "unaligned", card_description = "default description"):
+    def __init__(self, play_function, discard_function = Function(FuncName.NONE), faction_function = Function(FuncName.NONE), card_cost = 0, card_name = "default card name", card_faction = Faction.UNALIGNED, card_description = "default description"):
         #The default init will make a card with the functions as given
         #play_function: takes a current player_state as input, outputs a player_state
         self.discard_function = discard_function #discard function to be implemented when card is dusted
@@ -57,7 +57,7 @@ class Ship: #initialize card parameters for ship type cards
         #self.card_trade = card_trade #amount of trade card yields when played
 
 class Base: #initialize card parameters for a base
-    def __init__(self, turn_function, discard_function = Function(FuncName.NONE), faction_function = Function(FuncName.NONE), card_cost = 0, card_name = "default name", card_faction = "unaligned", card_description = "default_description", card_shield = 0):
+    def __init__(self, turn_function, discard_function = Function(FuncName.NONE), faction_function = Function(FuncName.NONE), card_cost = 0, card_name = "default name", card_faction = Faction.UNALIGNED, card_description = "default_description", card_shield = 0):
         self.turn_function = turn_function #turn function is the effect that you get when played, and the function that is applied each turn
         self.discard_function = discard_function #card function called when card is discarded from the board
         self.faction_function = faction_function #function to be applied (per turn) for faction bonus
@@ -68,7 +68,7 @@ class Base: #initialize card parameters for a base
         self.card_shields = card_shield #default to zero for passable shields
 
 class Landscape: #initialize card_parameters for landscape cards
-    def __init__(self, act_function, discard_function = Function(FuncName.NONE), faction_function = Function(FuncName.NONE), card_cost = 0, card_name = "default name", card_faction = "unaligned", card_description = "default description", card_shield = 0):
+    def __init__(self, act_function, discard_function = Function(FuncName.NONE), faction_function = Function(FuncName.NONE), card_cost = 0, card_name = "default name", card_faction = Faction.UNALIGNED, card_description = "default description", card_shield = 0):
         self.act_function = act_function #function that is called as the turn activation for landscapes
         self.discard_function = discard_function #function called when card is discarded
         self.faction_function = faction_function #function to be applied (per turn) for faction bonus
@@ -135,17 +135,62 @@ fleet_hq = Landscape(Function(FuncName.SHIP_POWERUP, effect=1), card_cost=8, car
 
 
 class Player:
-    def __init__(self):
-        self.authority = 50
-        self.deck = []
-        self.in_play = []
-        self.combat = 0
-        self.trade = 0
-        self.discard = []
+    def __init__(self, authority = 50, deck = [], in_play = [], hand = [], combat = 0, trade = 0, discard = 0):
+        self.authority = authority
+        self.deck = deck
+        self.in_play = in_play  # includes cards played this turn and all active bases
+        self.hand = hand
+        self.combat = combat
+        self.trade = trade
+        self.discard = discard
+
 
 class Game: 
-    def __init__(self):
-        self.current_player = 1
-        self.trade_row = []
-        self.deck = [] #deck of all cards to be drawn from
+    def __init__(self, curr_player = 0, player_list = [], trade_row = [], deck = []):
+        self.current_player = curr_player
+        self.player_list = player_list
+        self.trade_row = trade_row
+        self.deck = deck #deck of all cards to be drawn from
         #For this game we will implement the digital version with infinite explorer cards
+
+# all possible actions
+class ActName(Enum):
+    PLAY_CARD = 1
+    BUY_CARD = 2
+    ATTACK = 3
+    SCRAP_EFFECT = 4 # scrapping a played card for the discard_effect
+    SCRAP_TRADE_ROW = 5
+    DESTROY_BASE = 6
+    ACQUIRE_FREE_SHIP = 7
+    ACTIVATE_EFFECT = 8 # for activating between a choice of effects, or activating an optional effect
+    SCRAP_HAND_DISC = 9
+    COPY_SHIP = 10
+    SCRAP_HAND = 11
+    DISCARD_HAND = 12
+    END_TURN = 13
+
+class Action:
+    def __init__(self, act_name, target = None):
+        self.action_name = act_name # from ActName enum
+        self.target = target # for when an action requires targetting a card
+
+# given a game state, list the possible actions of the current player
+def list_actions(state):
+    curr_player = state.player_list[state.current_player]
+    valid_actions = []
+    for card in curr_player.hand:
+        valid_actions.append(Action(ActName.PLAY_CARD, card))
+    for card in state.trade_row:
+        if (curr_player.trade >= card.card_cost):   # use polymorphism for card_cost field?
+            valid_actions.append(Action(ActName.BUY_CARD, card))
+    for action in valid_actions:
+        print(action.action_name, action.target.card_name)
+
+p0 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, scout, viper], in_play = [], hand = [scout, scout, viper], combat = 0, trade = 3, discard = [])
+p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper], in_play = [], hand = [], combat = 0, trade = 0, discard = [])
+state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[patrol_mech, blob_wheel, imperial_frigate, missile_bot, embassy_yacht], deck=[])
+
+list_actions(state_example)
+
+# TODO: given a state and an action, return a new state
+# def action(state, action):

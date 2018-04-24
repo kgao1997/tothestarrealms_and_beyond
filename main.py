@@ -65,7 +65,7 @@ class Base: #initialize card parameters for a base
         self.card_cost = card_cost
         self.card_faction = card_faction
         self.card_description = card_description
-        self.card_shields = card_shield #default to zero for passable shields
+        self.card_shield = card_shield #default to zero for passable shields
 
 class Landscape: #initialize card_parameters for landscape cards
     def __init__(self, act_function, discard_function = Function(FuncName.NONE), faction_function = Function(FuncName.NONE), card_cost = 0, card_name = "default name", card_faction = Faction.UNALIGNED, card_description = "default description", card_shield = 0):
@@ -106,7 +106,7 @@ trade_escort = Ship(Function(FuncName.AND, func1=Function(FuncName.ADD_COMBAT, e
 flagship = Ship(Function(FuncName.AND, func1=Function(FuncName.ADD_COMBAT, effect=5), func2=Function(FuncName.DRAW_CARDS, effect=1)), faction_function=Function(FuncName.ADD_INFL, effect=5), card_cost = 6, card_name = 'Flagship', card_faction = Faction.TRADE_FED)
 port_of_call = Base(Function(FuncName.ADD_TRADE, effect=1), discard_function=Function(FuncName.AND, func1=Function(FuncName.DRAW_CARDS, effect=1), func2=Function(FuncName.DESTROY_BASE)), card_cost=6, card_name = 'Port of Call', card_faction=Faction.TRADE_FED, card_shield=6)
 central_office = Landscape(Function(FuncName.AND, func1 = Function(FuncName.ADD_TRADE, effect=2), func2 = Function(FuncName.SHIP_TO_TOP_DECK)), faction_function=Function(FuncName.DRAW_CARDS, effect=1), card_cost=7, card_name = 'Central Office', card_faction=Faction.TRADE_FED, card_shield=6)
-command_ship = Ship(Function(FuncName.AND, func1=Function(FuncName.ADD_INFL, effect=4), func2=Function(FuncName.ADD_COMBAT, effect=5), func3=Function(FuncName.DESTROY_BASE)), card_cost = 8, card_name = 'Command Ship', card_faction = Faction.TRADE_FED)
+command_ship = Ship(Function(FuncName.AND, func1=Function(FuncName.ADD_INFL, effect=4), func2=Function(FuncName.ADD_COMBAT, effect=5), func3=Function(FuncName.DRAW_CARDS, effect=2)), faction_function=Function(FuncName.DESTROY_BASE), card_cost = 8, card_name = 'Command Ship', card_faction = Faction.TRADE_FED)
 
 trade_bot = Ship(Function(FuncName.AND, func1=Function(FuncName.ADD_TRADE, effect=1), func2=Function(FuncName.SCRAP_HAND_DISC, effect=1)), faction_function=Function(FuncName.ADD_COMBAT, effect=2), card_cost = 1, card_name = 'Trade Bot', card_faction = Faction.MACH_CULT)
 missile_bot = Ship(Function(FuncName.AND, func1=Function(FuncName.ADD_COMBAT, effect=2), func2=Function(FuncName.SCRAP_HAND_DISC, effect=1)), faction_function=Function(FuncName.ADD_COMBAT, effect=2), card_cost = 2, card_name = 'Missile Bot', card_faction = Faction.MACH_CULT)
@@ -135,7 +135,7 @@ fleet_hq = Landscape(Function(FuncName.SHIP_POWERUP, effect=1), card_cost=8, car
 
 
 class Player:
-    def __init__(self, authority = 50, deck = [], in_play = [], hand = [], combat = 0, trade = 0, discard = 0):
+    def __init__(self, authority = 50, deck = [], in_play = [], hand = [], combat = 0, trade = 0, discard = []):
         self.authority = authority
         self.deck = deck
         self.in_play = in_play  # includes cards played this turn and all active bases
@@ -237,6 +237,54 @@ def valid_functions(player):
     #    print (f.function_name, f.effect)
     return valid_functions
 
+# print the info for a state
+def print_state(state):
+    print ('cuurent player is ' + str(state.current_player))
+    p0 = state.player_list[0]
+    p1 = state.player_list[1]
+    trade = ''
+    for card in state.trade_row:
+        trade = trade + (card.card_name) + ', '
+    print('trade row has: ' + trade)
+    print('p0 has ' + str(p0.authority) + ' authority' )
+    print('p0 has ' + str(p0.combat) + ' combat' )
+    print('p0 has ' + str(p0.trade) + ' trade' )
+    p0deck = ''
+    p0hand = ''
+    p0disc = ''
+    p0play = ''
+    for card in p0.deck:
+        p0deck = p0deck + (card.card_name) + ', '
+    for card in p0.hand:
+        p0hand = p0hand + (card.card_name) + ', '
+    for card in p0.discard:
+        p0disc = p0disc + (card.card_name) + ', '
+    for card in p0.in_play:
+        p0play = p0play + (card.card_name) + ', '
+    print('p0 deck has: ' + p0deck)
+    print('p0 hand has: ' + p0hand)
+    print('p0 discard pile has: ' + p0disc)
+    print('p0 in play: ' + p0play)
+    print('p1 has ' + str(p1.authority) + ' authority' )
+    print('p1 has ' + str(p1.combat) + ' combat' )
+    print('p1 has ' + str(p1.trade) + ' trade' )
+    p1deck = ''
+    p1hand = ''
+    p1disc = ''
+    p1play = ''
+    for card in p1.deck:
+        p1deck = p1deck + (card.card_name) + ', '
+    for card in p1.hand:
+        p1hand = p1hand + (card.card_name) + ', '
+    for card in p1.discard:
+        p1disc = p1disc + (card.card_name) + ', '
+    for card in p1.in_play:
+        p1play = p1play + (card.card_name) + ', '
+    print('p1 deck has: ' + p1deck)
+    print('p1 hand has: ' + p1hand)
+    print('p1 discard pile has: ' + p1disc)
+    print('p1 in play: ' + p1play)
+
 # given a game state, list the possible actions of the current player
 def list_actions(state):
     curr_player = state.player_list[state.current_player]
@@ -250,11 +298,11 @@ def list_actions(state):
     if curr_player.combat > 0:   # can attack base if in play, or opponent if no base in play
         if has_base(opp_player):
             for card in opp_player.in_play:
-                if isinstance(card, Base):
+                if isinstance(card, Base) and curr_player.combat >= card.card_shield:
                     valid_actions.append(Action(ActName.ATTACK, card))
         else:
             for card in opp_player.in_play:
-                if isinstance(card, Landscape):
+                if isinstance(card, Landscape) and curr_player.combat >= card.card_shield:
                     valid_actions.append(Action(ActName.ATTACK, card))
             valid_actions.append(Action(ActName.ATTACK, 'Opponent'))
     for card in curr_player.in_play:   # can scrap any card with a discard effect
@@ -281,21 +329,89 @@ def list_actions(state):
             for card in curr_player.in_play:
                 if isinstance(card, Ship) and card != stealth_needle:
                     valid_actions.append(Action(ActName.COPY_SHIP, card))
-    # TODO: activate effect for a choice of effects
-    # TODO: more complex functions, i.e. scrap->draw, draw->scrap, disc->draw
+        elif f.function_name == FuncName.DRAW_THEN_SCRAP:
+            for card in curr_player.in_play:
+                if card == machine_base:
+                    valid_actions.append(Action(ActName.ACTIVATE_EFFECT, card))
+        elif f.function_name == FuncName.SCRAP_THEN_DRAW:
+            for card in curr_player.hand:
+                valid_actions.append(Action(ActName.SCRAP_HAND_DISC, card))
+            for card in curr_player.discard:
+                valid_actions.append(Action(ActName.SCRAP_HAND_DISC, card))
+        elif f.function_name == FuncName.DISC_THEN_DRAW:
+            for card in curr_player.hand:
+                valid_actions.append(Action(ActName.DISCARD_HAND, card))
+    # TODO: activate effect for a choice of effects, or optional effects
     valid_actions.append(Action(ActName.END_TURN))
+    '''
     for action in valid_actions:   # print actions (for debugging)
         if isinstance(action.target, Ship) or isinstance(action.target, Landscape) or isinstance(action.target, Base):   # polymorphism pls
             print(action.action_name, action.target.card_name)
         else:
             print(action.action_name, action.target)
-
-p0 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, scout, viper], in_play = [scout, stealth_needle], hand = [scout, scout, viper], combat = 3, trade = 3, discard = [junkyard])
-p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper], in_play = [barter_world], hand = [], combat = 0, trade = 0, discard = [])
-state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[patrol_mech, blob_wheel, imperial_frigate, missile_bot, embassy_yacht], deck=[])
-
-valid_functions(p0)
-list_actions(state_example)
+    '''
+    return valid_actions
 
 # TODO: given a state and an action, return a new state
-# def action(state, action):
+def action(state, action):
+    curr_player = state.player_list[state.current_player]
+    opp_player = state.player_list[state.current_player + 1 % 2]
+    valid_actions = list_actions(state)  # use this to check if action is valid
+    valid = False
+    for a in valid_actions:
+        if action.action_name == a.action_name and action.target == a.target:
+            valid = True
+    if not valid:
+        raise ValueError
+    if (action.action_name == ActName.PLAY_CARD):
+        card = action.target
+        curr_player.hand.remove(card)
+        curr_player.in_play.append(card)
+        (blob_bonus, trade_bonus, mach_bonus, star_bonus) = faction_bonus(curr_player)
+        valid_functions = []
+        if card.play_function.function_name != FuncName.NONE:
+            valid_functions.append(card.play_function)
+        if card.play_function.function_name == FuncName.AND:
+            if card.play_function.func1 is not None:
+                valid_functions.append(card.play_function.func1)
+            if card.play_function.func2 is not None:
+                valid_functions.append(card.play_function.func2)
+            if card.play_function.func3 is not None:
+                valid_functions.append(card.play_function.func3)
+        if (card.card_faction == Faction.BLOB and blob_bonus) or (card.card_faction == Faction.TRADE_FED and trade_bonus) or (card.card_faction == Faction.MACH_CULT and mach_bonus) or (card.card_faction == Faction.STAR_EMP and star_bonus):
+            if card.faction_function.function_name != FuncName.NONE:
+                valid_functions.append(card.faction_function)
+            if card.faction_function.function_name == FuncName.AND:
+                if card.faction_function.func1 is not None:
+                    valid_functions.append(card.faction_function.func1)
+                if card.faction_function.func2 is not None:
+                    valid_functions.append(card.faction_function.func2)
+                if card.faction_function.func3 is not None:
+                    valid_functions.append(card.faction_function.func3)
+        for f in valid_functions:   # activate all functions that are passive effects
+            if f.function_name == FuncName.ADD_TRADE:
+                curr_player.trade += f.effect
+            elif f.function_name == FuncName.ADD_COMBAT:
+                curr_player.combat += f.effect
+            elif f.function_name == FuncName.DRAW_CARDS:
+                for i in range(f.effect):
+                    if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
+                        curr_player.deck = curr_player.discard
+                        curr_player.discard = []
+                    new_card = curr_player.deck.pop()   # TODO: randomize
+                    curr_player.hand.append(new_card)
+            elif f.function_name == FuncName.ADD_INFL:
+                curr_player.authority += f.effect
+            # TODO: draw cards if blob, draw cards if base, opponent discard, ship powerup
+    return state
+
+
+p0 = Player(authority = 50, deck = [scout, scout, scout], in_play = [], hand = [scout, scout, viper, command_ship], combat = 0, trade = 0, discard = [])
+p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper], in_play = [], hand = [], combat = 0, trade = 0, discard = [])
+state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[patrol_mech, blob_wheel, imperial_frigate, missile_bot, embassy_yacht], deck=[])
+
+print_state(state_example)
+#valid_functions(p0)
+#list_actions(state_example)
+new_state = action(state_example, Action(ActName.PLAY_CARD, command_ship))
+print_state(new_state)

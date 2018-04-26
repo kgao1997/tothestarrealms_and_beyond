@@ -135,7 +135,7 @@ fleet_hq = Landscape(Function(FuncName.SHIP_POWERUP, effect=1), card_cost=8, car
 
 
 class Player:
-    def __init__(self, authority = 50, deck = [], in_play = [], hand = [], combat = 0, trade = 0, discard = [], num_to_discard = 0):
+    def __init__(self, authority = 50, deck = [], in_play = [], hand = [], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = []):
         self.authority = authority
         self.deck = deck
         self.in_play = in_play  # includes cards played this turn and all active bases
@@ -144,6 +144,7 @@ class Player:
         self.trade = trade
         self.discard = discard   # discard pile
         self.num_to_discard = num_to_discard   # forced discards at beginning of turn
+        self.used = used   # cards for which we have already used the optional ability
 
 
 class Game: 
@@ -217,23 +218,24 @@ def valid_functions(player):
     (blob_bonus, trade_bonus, mach_bonus, star_bonus) = faction_bonus(player)
     valid_functions = []
     for card in player.in_play:
-        if card.play_function.function_name != FuncName.NONE:
-            valid_functions.append(card.play_function)
-        if card.play_function.func1 is not None:
-            valid_functions.append(card.play_function.func1)
-        if card.play_function.func2 is not None:
-            valid_functions.append(card.play_function.func2)
-        if card.play_function.func3 is not None:
-            valid_functions.append(card.play_function.func3)
-        if (card.card_faction == Faction.BLOB and blob_bonus) or (card.card_faction == Faction.TRADE_FED and trade_bonus) or (card.card_faction == Faction.MACH_CULT and mach_bonus) or (card.card_faction == Faction.STAR_EMP and star_bonus):
-            if card.faction_function.function_name != FuncName.NONE:
-                valid_functions.append(card.faction_function)
-            if card.faction_function.func1 is not None:
-                valid_functions.append(card.faction_function.func1)
-            if card.faction_function.func2 is not None:
-                valid_functions.append(card.faction_function.func2)
-            if card.faction_function.func3 is not None:
-                valid_functions.append(card.faction_function.func3)
+        if card not in player.used:   # if a card has been used, all effects have been activated, and all optional actions have been done TODO: multiple card in play
+            if card.play_function.function_name != FuncName.NONE:
+                valid_functions.append(card.play_function)
+            if card.play_function.func1 is not None:
+                valid_functions.append(card.play_function.func1)
+            if card.play_function.func2 is not None:
+                valid_functions.append(card.play_function.func2)
+            if card.play_function.func3 is not None:
+                valid_functions.append(card.play_function.func3)
+            if (card.card_faction == Faction.BLOB and blob_bonus) or (card.card_faction == Faction.TRADE_FED and trade_bonus) or (card.card_faction == Faction.MACH_CULT and mach_bonus) or (card.card_faction == Faction.STAR_EMP and star_bonus):
+                if card.faction_function.function_name != FuncName.NONE:
+                    valid_functions.append(card.faction_function)
+                if card.faction_function.func1 is not None:
+                    valid_functions.append(card.faction_function.func1)
+                if card.faction_function.func2 is not None:
+                    valid_functions.append(card.faction_function.func2)
+                if card.faction_function.func3 is not None:
+                    valid_functions.append(card.faction_function.func3)
     #for f in valid_functions:
     #    print (f.function_name, f.effect)
     return valid_functions
@@ -291,7 +293,7 @@ def print_state(state):
 # given a game state, list and return the possible actions of the current player
 def list_actions(state):
     curr_player = state.player_list[state.current_player]
-    opp_player = state.player_list[state.current_player + 1 % 2]
+    opp_player = state.player_list[(state.current_player + 1) % 2]
     valid_actions = []
     if curr_player.num_to_discard > 0:   # must discard cards before doing anything else
         for card in curr_player.hand:
@@ -350,19 +352,19 @@ def list_actions(state):
                 valid_actions.append(Action(ActName.DISCARD_HAND, card))
     # TODO: activate effect for a choice of effects, or optional effects
     valid_actions.append(Action(ActName.END_TURN))
-    '''
+    
     for action in valid_actions:   # print actions (for debugging)
         if isinstance(action.target, Ship) or isinstance(action.target, Landscape) or isinstance(action.target, Base):   # polymorphism pls
             print(action.action_name, action.target.card_name)
         else:
             print(action.action_name, action.target)
-    '''
+    
     return valid_actions
 
 # TODO: given a state and an action, return a new state
 def action(state, action):
     curr_player = state.player_list[state.current_player]
-    opp_player = state.player_list[state.current_player + 1 % 2]
+    opp_player = state.player_list[(state.current_player + 1) % 2]
     valid_actions = list_actions(state)  # use this to check if action is valid
     valid = False
     for a in valid_actions:
@@ -448,21 +450,75 @@ def action(state, action):
             opp_player.num_to_discard += f.effect
         # TODO: missing AND, DESTROY_BASE
         # TODO: this code is copied, should be factored out into common function
-    # TODO: specialized actions, how to avoid double use??
+    elif (action.action_name == ActName.SCRAP_TRADE_ROW):
+        state.trade_row.remove(action.target)
+        state.trade_row.append(missile_bot)   # TODO: random
+        for card in curr_player.in_play:
+            if card == battle_pod or card == blob_destroyer:   # TODO: temp solution, would be better to add card backptrs to all functions and actions
+                curr_player.used.append(card)
+                break
+    elif (action.action_name == ActName.DESTROY_BASE):
+        opp_player.in_play.remove(action.target)
+        opp_player.discard.append(action.target)
+        for card in curr_player.in_play:
+            if card == blob_destroyer or card == command_ship or card == missile_mech:   # TODO: temp
+                curr_player.used.append(card)
+                break
+    elif (action.action_name == ActName.ACQUIRE_FREE_SHIP):
+        state.trade_row.remove(action.target)
+        if (action.target == explorer):
+            state.trade_row.append(explorer)
+        else:
+            state.trade_row.append(missile_bot)   # TODO: random
+        curr_player.deck.append(action.target)   # TODO: note that a free ship is added to the TOP of the deck
+        for card in curr_player.in_play:
+            if card == blob_carrier:
+                curr_player.used.append(card)
+                break
+    elif (action.action_name == ActName.SCRAP_HAND_DISC):
+        removed = False
+        for card in curr_player.discard:
+            if card == action.target:
+                curr_player.discard.remove(card)
+                removed = True
+                break
+        if not removed:
+            for card in curr_player.hand:
+                if card == action.target:
+                    curr_player.hand.remove(card)
+                    break
+        for card in curr_player.in_play:
+            if card == trade_bot or card == missile_bot or card == supply_bot or card == patrol_mech or card == battle_mech or card == junkyard:
+                curr_player.used.append(card)
+                break
+    # TODO: activate effect, copy ship, scrap hand (special), discard hand (special)
     elif (action.action_name == ActName.DISCARD_HAND):
         if (curr_player.num_to_discard > 0):
             curr_player.num_to_discard -= 1
         curr_player.hand.remove(action.target)
         curr_player.discard.append(action.target)
+    elif (action.action_name == ActName.END_TURN):
+        for card in curr_player.in_play:
+            if isinstance(card, Ship):   # all ships are discarded, bases remain
+                curr_player.discard.append(card)
+        curr_player.in_play[:] = [card for card in curr_player.in_play if not isinstance(card, Ship)]
+        for card in curr_player.hand:
+            curr_player.discard.append(card)
+        curr_player.hand = []
+        curr_player.combat = 0
+        curr_player.trade = 0
+        curr_player.used = []   # all cards used this turn can be used next turn
+        state.current_player = (state.current_player + 1) % 2
     return state
 
 
-p0 = Player(authority = 50, deck = [scout, scout, scout], in_play = [explorer], hand = [scout, scout, viper, imperial_fighter], combat = 0, trade = 0, discard = [], num_to_discard = 1)
+p0 = Player(authority = 50, deck = [scout, scout, scout], in_play = [trade_bot], hand = [scout, scout, viper, imperial_fighter], combat = 10, trade = 10, discard = [scout], num_to_discard = 0, used = [])
 p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper], in_play = [trading_post], hand = [], combat = 0, trade = 0, discard = [], num_to_discard = 0)
 state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[explorer, patrol_mech, blob_wheel, imperial_frigate, missile_bot, embassy_yacht], deck=[])
 
 print_state(state_example)
 #valid_functions(p0)
 #list_actions(state_example)
-new_state = action(state_example, Action(ActName.DISCARD_HAND, imperial_fighter))
+new_state = action(state_example, Action(ActName.SCRAP_HAND_DISC, scout))
 print_state(new_state)
+action(state_example, Action(ActName.END_TURN))

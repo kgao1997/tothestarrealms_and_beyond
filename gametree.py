@@ -1,6 +1,8 @@
+import math
+
 class GameTree:
     def __init__(self, v, c):
-        self.value = v   # all values in a tree should have same type
+        self.value = v   # all values in a tree should have same type (i.e. game state)
         self.children = c   # list of child gametrees
 
     def print_tree(self):
@@ -15,7 +17,7 @@ class GameTree:
         if (depth == 0 or not self.children):
             return self.eval(self.value)
         else:
-            maxval = -10000   # TODO: lower bound on game val
+            maxval = -math.inf
             for c in self.children:
                 tempval = c.maximin (depth-1)
                 if (tempval > maxval):
@@ -26,7 +28,7 @@ class GameTree:
         if (depth == 0 or not self.children):
             return self.eval(self.value)
         else:
-            minval = 10000   # TODO: upper bound on game val
+            minval = math.inf
             for c in self.children:
                 tempval = c.minimax (depth-1)
                 if (tempval < minval):
@@ -38,7 +40,7 @@ class GameTree:
         if (depth == 0 or not self.children):
             return self.eval(self.value)
         else:
-            maxval = -10000   # TODO: lower bound on game val
+            maxval = -math.inf
             for c in self.children:
                 tempval = c.maximinAB (depth-1, max(a, maxval), b)
                 if (tempval >= b):
@@ -52,7 +54,7 @@ class GameTree:
         if (depth == 0 or not self.children):
             return self.eval(self.value)
         else:
-            minval = 10000   # TODO: upper bound on game val
+            minval = math.inf
             for c in self.children:
                 tempval = c.minimaxAB (depth-1, a, min(b, minval))
                 if (tempval <= a):
@@ -61,6 +63,7 @@ class GameTree:
                     minval = tempval
             return minval
 
+'''
 tree = GameTree(7, [GameTree(5, [GameTree(1, []), GameTree(2, [])]), GameTree(6, [GameTree(3, []), GameTree(4, [])])])
 
 #tree.print_tree()
@@ -79,3 +82,4 @@ print (tree.minimaxAB(20, -10000, 10000))
 print (tree.maximinAB(0, -10000, 10000))
 print (tree.maximinAB(1, -10000, 10000))
 print (tree.maximinAB(20, -10000, 10000))
+'''

@@ -1,4 +1,7 @@
 from enum import Enum
+from gametree import GameTree
+import random
+import copy
 
 # all ship and outpost factions
 class Faction(Enum):
@@ -352,16 +355,16 @@ def list_actions(state):
                 valid_actions.append(Action(ActName.DISCARD_HAND, card))
     # TODO: activate effect for a choice of effects, or optional effects
     valid_actions.append(Action(ActName.END_TURN))
-    
+    '''    
     for action in valid_actions:   # print actions (for debugging)
         if isinstance(action.target, Ship) or isinstance(action.target, Landscape) or isinstance(action.target, Base):   # polymorphism pls
             print(action.action_name, action.target.card_name)
         else:
             print(action.action_name, action.target)
-    
+    ''' 
     return valid_actions
 
-# TODO: given a state and an action, return a new state
+# Given a state and an action, return a new state
 def action(state, action):
     curr_player = state.player_list[state.current_player]
     opp_player = state.player_list[(state.current_player + 1) % 2]
@@ -497,7 +500,7 @@ def action(state, action):
             curr_player.num_to_discard -= 1
         curr_player.hand.remove(action.target)
         curr_player.discard.append(action.target)
-    elif (action.action_name == ActName.END_TURN):
+    elif (action.action_name == ActName.END_TURN):   #TODO: opponent should draw a hand and have their bases' automatic effects
         for card in curr_player.in_play:
             if isinstance(card, Ship):   # all ships are discarded, bases remain
                 curr_player.discard.append(card)
@@ -511,14 +514,53 @@ def action(state, action):
         state.current_player = (state.current_player + 1) % 2
     return state
 
+# Create a game tree starting from state s, to depth d, with branching factor b
+# Explanation: because of the nature of the game, the branching factor is exponentially
+# large for each state (there are many combinations of actions). Thus we will try randomly
+# sampling b random actions for each state, and performing game tree search on the 
+# resulting tree. Note that each action is a sequence of moves, ending in END_TURN.
+# TODO: there are porbably smarter ways of generating actions, eg. play all cards first, 
+# always complete all possible actions before selecting END_TURN, etc.
+def create_tree(s, d, b):
+    if (d == 0):   # base case
+        return GameTree(v = s, c = [])
 
-p0 = Player(authority = 50, deck = [scout, scout, scout], in_play = [trade_bot], hand = [scout, scout, viper, imperial_fighter], combat = 10, trade = 10, discard = [scout], num_to_discard = 0, used = [])
-p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper], in_play = [trading_post], hand = [], combat = 0, trade = 0, discard = [], num_to_discard = 0)
+    children = []   # recursive case
+    actions_to_children = []
+    for i in range(0,b):
+        state = copy.deepcopy(s)   
+        pos_actions = list_actions(state)
+        move_seq = []
+        while(all(move.action_name != ActName.END_TURN for move in move_seq)):
+            randAct = pos_actions[random.randint(0, len(pos_actions) - 1)]
+            move_seq.append(randAct)
+            state = action(state, randAct)
+            pos_actions = list_actions(state)
+        child_tree = create_tree(state, d-1, b)
+            
+        for m in move_seq:   # print actions (for debugging)
+            if isinstance(m.target, Ship) or isinstance(m.target, Landscape) or isinstance(m.target, Base):   # polymorphism pls
+                print(m.action_name, m.target.card_name)
+            else:
+                print(m.action_name, m.target)
+         
+        children.append(child_tree)
+        actions_to_children.append(move_seq)
+
+    return GameTree(v = s, c = children)
+
+
+p0 = Player(authority = 50, deck = [scout, scout, scout], in_play = [], hand = [scout, scout, viper], combat = 0, trade = 0, discard = [scout], num_to_discard = 0, used = [])
+p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper], in_play = [], hand = [], combat = 0, trade = 0, discard = [], num_to_discard = 0)
 state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[explorer, patrol_mech, blob_wheel, imperial_frigate, missile_bot, embassy_yacht], deck=[])
 
-print_state(state_example)
+#print_state(state_example)
 #valid_functions(p0)
 #list_actions(state_example)
-new_state = action(state_example, Action(ActName.SCRAP_HAND_DISC, scout))
-print_state(new_state)
-action(state_example, Action(ActName.END_TURN))
+#new_state = action(state_example, Action(ActName.SCRAP_HAND_DISC, scout))
+#print_state(new_state)
+#action(state_example, Action(ActName.END_TURN))
+t = create_tree(state_example, d= 1, b= 2)
+print_state(t.value)
+for s in t.children:
+    print_state(s.value)

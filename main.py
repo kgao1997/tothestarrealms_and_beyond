@@ -324,7 +324,8 @@ def list_actions(state):
     for f in valid_funcs:   # special effects: scrap a card in the trade row, destroy target base, etc.
         if f.function_name == FuncName.SCRAP_TRADE_ROW:
             for card in state.trade_row:
-                valid_actions.append(Action(ActName.SCRAP_TRADE_ROW, card))
+                if card != explorer:
+                    valid_actions.append(Action(ActName.SCRAP_TRADE_ROW, card))
         elif f.function_name == FuncName.DESTROY_BASE:
             for card in opp_player.in_play:
                 if isinstance(card, Base) or isinstance(card, Landscape):
@@ -355,14 +356,21 @@ def list_actions(state):
                 valid_actions.append(Action(ActName.DISCARD_HAND, card))
     # TODO: activate effect for a choice of effects, or optional effects
     valid_actions.append(Action(ActName.END_TURN))
-        
+    '''    
     for action in valid_actions:   # print actions (for debugging)
         if isinstance(action.target, Ship) or isinstance(action.target, Landscape) or isinstance(action.target, Base):   # polymorphism pls
             print(action.action_name, action.target.card_name)
         else:
             print(action.action_name, action.target)
-     
+    
     return valid_actions
+    '''
+# Pick a random ship/base from the cards to add to the trade row
+# Note: I have no idea if the cards are actually added to the trade row with uniform frequency
+def random_card():
+    cards = [blob_fighter, battle_pod, trade_pod, blob_wheel, ram, blob_destroyer, the_hive, battle_blob, blob_carrier, mothership, blob_world, federation_shuttle, cutter, embassy_yacht, trading_post, barter_world, freighter, defense_center, trade_escort, flagship, port_of_call, central_office, command_ship, trade_bot, missile_bot, battle_station, supply_bot, patrol_mech, stealth_needle, battle_mech, missile_mech, mech_world, junkyard, machine_base, brain_world, imperial_fighter, corvette, imperial_frigate, survey_ship, battlecruiser, dreadnaught, recycling_station, space_station, war_world, royal_redoubt, fleet_hq]
+    randInt = random.randint(0, len(cards)-1)
+    return cards[randInt]
 
 # Given a state and an action, return a new state
 def action(state, action):
@@ -423,7 +431,8 @@ def action(state, action):
         if (action.target == explorer):
             state.trade_row.append(explorer)
         else:
-            state.trade_row.append(missile_bot)   # TODO; pick a random card from starting distribution
+            randCard = random_card()
+            state.trade_row.append(randCard)   
         curr_player.discard.append(action.target)
         curr_player.trade -= action.target.card_cost
     elif (action.action_name == ActName.ATTACK):
@@ -457,7 +466,8 @@ def action(state, action):
         # TODO: this code is copied, should be factored out into common function
     elif (action.action_name == ActName.SCRAP_TRADE_ROW):
         state.trade_row.remove(action.target)
-        state.trade_row.append(missile_bot)   # TODO: random
+        randCard = random_card()
+        state.trade_row.append(randCard)   
         for card in curr_player.in_play:
             if card == battle_pod or card == blob_destroyer:   # TODO: temp solution, would be better to add card backptrs to all functions and actions
                 curr_player.used.append(card)
@@ -474,7 +484,8 @@ def action(state, action):
         if (action.target == explorer):
             state.trade_row.append(explorer)
         else:
-            state.trade_row.append(missile_bot)   # TODO: random
+            randCard = random_card()
+            state.trade_row.append(randCard)
         curr_player.deck.append(action.target)   # TODO: note that a free ship is added to the TOP of the deck
         for card in curr_player.in_play:
             if card == blob_carrier:
@@ -502,7 +513,7 @@ def action(state, action):
             curr_player.num_to_discard -= 1
         curr_player.hand.remove(action.target)
         curr_player.discard.append(action.target)
-    elif (action.action_name == ActName.END_TURN):   #TODO: opponent should draw a hand and have their bases' automatic effects
+    elif (action.action_name == ActName.END_TURN):
         for card in curr_player.in_play:
             if isinstance(card, Ship):   # all ships are discarded, bases remain
                 curr_player.discard.append(card)
@@ -551,6 +562,12 @@ def action(state, action):
 # resulting tree. Note that each action is a sequence of moves, ending in END_TURN.
 # TODO: there are porbably smarter ways of generating actions, eg. play all cards first, 
 # always complete all possible actions before selecting END_TURN, etc.
+# Problem: some actions depend on random results from previous actions. For example, if 
+# you play a card which lets you draw a card, and then play that drawn card. If game tree
+# search returns this as the optimal sequence of actions, then performing the same
+# sequence of actions may not lead to the same card drawn, and thus will not lead to 
+# the same state. Game tree seach does not seem suited for nondeterministic events
+# like these.
 def create_tree(s, d, b):
     if (d == 0):   # base case
         return GameTree(v = s, c = [])
@@ -580,22 +597,23 @@ def create_tree(s, d, b):
     return GameTree(v = s, c = children)
 
 
-p0 = Player(authority = 50, deck = [], in_play = [], hand = [scout, scout, viper, corvette], combat = 0, trade = 0, discard = [scout, scout, scout, scout, scout, scout, viper], num_to_discard = 0, used = [])
+p0 = Player(authority = 50, deck = [], in_play = [battle_pod], hand = [scout, scout, viper, corvette], combat = 0, trade = 10, discard = [scout, scout, scout, scout, scout, scout, viper], num_to_discard = 0, used = [])
 p1 = Player(authority = 50, deck = [scout, scout, scout, scout], in_play = [], hand = [], combat = 0, trade = 0, discard = [scout, scout, scout, scout, viper, viper], num_to_discard = 0)
 state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[explorer, patrol_mech, blob_wheel, imperial_frigate, missile_bot, embassy_yacht], deck=[])
 
 print_state(state_example)
 #valid_functions(p0)
 #list_actions(state_example)
-new_state = action(state_example, Action(ActName.END_TURN))
+#new_state = action(state_example, Action(ActName.END_TURN))
 #new_state = action(state_example, Action(ActName.PLAY_CARD, corvette))
+new_state = action(state_example, Action(ActName.BUY_CARD, blob_wheel))
 print_state(new_state)
 list_actions(new_state)
 #action(state_example, Action(ActName.END_TURN))
 
 '''
-t = create_tree(state_example, d= 1, b= 2)
+t = create_tree(state_example, d= 2, b= 2)
 print_state(t.value)
 for s in t.children:
     print_state(s.value)
-    '''
+   ''' 

@@ -355,13 +355,13 @@ def list_actions(state):
                 valid_actions.append(Action(ActName.DISCARD_HAND, card))
     # TODO: activate effect for a choice of effects, or optional effects
     valid_actions.append(Action(ActName.END_TURN))
-    '''    
+        
     for action in valid_actions:   # print actions (for debugging)
         if isinstance(action.target, Ship) or isinstance(action.target, Landscape) or isinstance(action.target, Base):   # polymorphism pls
             print(action.action_name, action.target.card_name)
         else:
             print(action.action_name, action.target)
-    ''' 
+     
     return valid_actions
 
 # Given a state and an action, return a new state
@@ -380,27 +380,27 @@ def action(state, action):
         curr_player.hand.remove(card)
         curr_player.in_play.append(card)
         (blob_bonus, trade_bonus, mach_bonus, star_bonus) = faction_bonus(curr_player)
-        valid_functions = []
+        functions = []
         if card.play_function.function_name != FuncName.NONE:
-            valid_functions.append(card.play_function)
+            functions.append(card.play_function)
         if card.play_function.function_name == FuncName.AND:
             if card.play_function.func1 is not None:
-                valid_functions.append(card.play_function.func1)
+                functions.append(card.play_function.func1)
             if card.play_function.func2 is not None:
-                valid_functions.append(card.play_function.func2)
+                functions.append(card.play_function.func2)
             if card.play_function.func3 is not None:
-                valid_functions.append(card.play_function.func3)
+                functions.append(card.play_function.func3)
         if (card.card_faction == Faction.BLOB and blob_bonus) or (card.card_faction == Faction.TRADE_FED and trade_bonus) or (card.card_faction == Faction.MACH_CULT and mach_bonus) or (card.card_faction == Faction.STAR_EMP and star_bonus):
             if card.faction_function.function_name != FuncName.NONE:
-                valid_functions.append(card.faction_function)
+                functions.append(card.faction_function)
             if card.faction_function.function_name == FuncName.AND:
                 if card.faction_function.func1 is not None:
-                    valid_functions.append(card.faction_function.func1)
+                    functions.append(card.faction_function.func1)
                 if card.faction_function.func2 is not None:
-                    valid_functions.append(card.faction_function.func2)
+                    functions.append(card.faction_function.func2)
                 if card.faction_function.func3 is not None:
-                    valid_functions.append(card.faction_function.func3)
-        for f in valid_functions:   # activate all functions that are passive effects
+                    functions.append(card.faction_function.func3)
+        for f in functions:   # activate all functions that are passive effects
             if f.function_name == FuncName.ADD_TRADE:
                 curr_player.trade += f.effect
             elif f.function_name == FuncName.ADD_COMBAT:
@@ -410,7 +410,8 @@ def action(state, action):
                     if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
                         curr_player.deck = curr_player.discard
                         curr_player.discard = []
-                    new_card = curr_player.deck.pop()   # TODO: randomize
+                        random.shuffle(curr_player.deck)
+                    new_card = curr_player.deck.pop()
                     curr_player.hand.append(new_card)
             elif f.function_name == FuncName.ADD_INFL:
                 curr_player.authority += f.effect
@@ -445,7 +446,8 @@ def action(state, action):
                 if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
                     curr_player.deck = curr_player.discard
                     curr_player.discard = []
-                new_card = curr_player.deck.pop()   # TODO: randomize
+                    random.shuffle(curr_player.deck)
+                new_card = curr_player.deck.pop()
                 curr_player.hand.append(new_card)
         elif f.function_name == FuncName.ADD_INFL:
             curr_player.authority += f.effect
@@ -512,6 +514,34 @@ def action(state, action):
         curr_player.trade = 0
         curr_player.used = []   # all cards used this turn can be used next turn
         state.current_player = (state.current_player + 1) % 2
+        # opponent draws a hand, gains passive effects from bases currently in play
+        for i in range(0, 5):
+            if len(opp_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
+                opp_player.deck = opp_player.discard
+                opp_player.discard = []
+                random.shuffle(opp_player.deck)
+            new_card = opp_player.deck.pop()   
+            opp_player.hand.append(new_card)
+        funcs = valid_functions(opp_player)
+        for f in funcs:   # activate all functions that are passive effects
+            if f.function_name == FuncName.ADD_TRADE:
+                opp_player.trade += f.effect
+            elif f.function_name == FuncName.ADD_COMBAT:
+                   opp_player.combat += f.effect
+            elif f.function_name == FuncName.DRAW_CARDS:
+                for i in range(f.effect):
+                    if len(opp_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
+                        opp_player.deck = opp_player.discard
+                        opp_player.discard = []
+                        random.shuffle(opp_player.deck)
+                    new_card = opp_player.deck.pop()
+                    opp_player.hand.append(new_card)
+            elif f.function_name == FuncName.ADD_INFL:
+                opp_player.authority += f.effect
+            elif f.function_name == FuncName.OPP_DISCARD:
+                curr_player.num_to_discard += f.effect
+            # TODO: draw cards if blob, draw cards if base, ship powerup
+
     return state
 
 # Create a game tree starting from state s, to depth d, with branching factor b
@@ -550,17 +580,22 @@ def create_tree(s, d, b):
     return GameTree(v = s, c = children)
 
 
-p0 = Player(authority = 50, deck = [scout, scout, scout], in_play = [], hand = [scout, scout, viper], combat = 0, trade = 0, discard = [scout], num_to_discard = 0, used = [])
-p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper], in_play = [], hand = [], combat = 0, trade = 0, discard = [], num_to_discard = 0)
+p0 = Player(authority = 50, deck = [], in_play = [], hand = [scout, scout, viper, corvette], combat = 0, trade = 0, discard = [scout, scout, scout, scout, scout, scout, viper], num_to_discard = 0, used = [])
+p1 = Player(authority = 50, deck = [scout, scout, scout, scout], in_play = [], hand = [], combat = 0, trade = 0, discard = [scout, scout, scout, scout, viper, viper], num_to_discard = 0)
 state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[explorer, patrol_mech, blob_wheel, imperial_frigate, missile_bot, embassy_yacht], deck=[])
 
-#print_state(state_example)
+print_state(state_example)
 #valid_functions(p0)
 #list_actions(state_example)
-#new_state = action(state_example, Action(ActName.SCRAP_HAND_DISC, scout))
-#print_state(new_state)
+new_state = action(state_example, Action(ActName.END_TURN))
+#new_state = action(state_example, Action(ActName.PLAY_CARD, corvette))
+print_state(new_state)
+list_actions(new_state)
 #action(state_example, Action(ActName.END_TURN))
+
+'''
 t = create_tree(state_example, d= 1, b= 2)
 print_state(t.value)
 for s in t.children:
     print_state(s.value)
+    '''

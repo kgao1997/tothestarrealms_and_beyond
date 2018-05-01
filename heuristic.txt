@@ -1,0 +1,47 @@
+Heuristic Function Writeup (Based on Darwin Kastle's Analysis at https://www.starrealms.com/strategy-article-by-darwin-kastle/)
+
+Game Split into three sections: 
+
+Opening: Game start until: 
+  1. Both Life Totals < 40
+  2. Both players pass Third turn
+Objective function for opening phase:
+  1. Obtain scrapping cards -> want to remove starting cards from deck as soon as possible (Vipers and Basic 1 Power cards)
+  2. Evaluate available trade pool. Identify strategy: 
+    a. If bomb-tier cards exist in pool, prioritize obtaining trade resource cards to "ramp" into bomb
+    b. Then prioritize unconditional cantrips (since they offer no cost in card advantage)
+    c. If smaller cards available, prioritize drafting multiple cards of the same faction (such as Blob Fighter for Blobs, etc)
+  3.  At end of opening phase, strategies will be decided. For reference, card faction to strategy will be tallied as follows: 
+    a. Red -> Scrap own cards to improve the quality of cards drawn in mid to late game.
+    b. Yellow -> Play cards, focus on no resource gain but disrupting opponent's hand
+    c. Blob -> Synergy with other Blob cards. With Blob, prioritize obtaining Blob cards
+    d. Blue -> Gain life and draw through cards.
+  4. Archetype Card -> Trade Cruiser - 
+    a. Obtain Cruiser-> evaluate base cards above all else due to raw power level. 
+    
+ Midgame -> When both players are between 30-50 life (to account for Machine Orthodoxy's strategy of gaining life and resources). 
+    1. Players begin to scrap Explorers
+    2. Player primary faction determined to various weights. Focus on obtaining cards of player's faction while still establishing a 
+       secondary faction. 
+  
+  Lategame -> Evaluate the function deeply to see how to optimize damage. Use Heuristic function based on weighting damage/resources 
+  based on 
+  
+Bomb Class Cards (Cards that would trigger resource-ramp tactics): (In order of impact)
+  The Hive
+  Blob World
+  Embassy Yacht -> Write a specific heuristic function that will take into account the existence of Embassy Yacht for calculations
+  Command Ship
+  Brain World -> Narrow, but amount of early game card advantage this creates is absurd. 
+  Fleet HQ
+
+Generic Priority: 
+  Recycling Station -> Utility of this card is too good to be ignored. If a Recycling Station is available, should immediately kill
+  
+Computation of card pick value (Formula) -> Use a sigmoidal activation function based on game state to adjust card's value
+(Will use sigmoidal functions). 
+Resource = 1
+Value of Damage -> cardDamage * sigmoid(opposingHealth/40)
+Value of Authority (Health) -> cardAuthority * sigmoid(-currentHealth / 40)
+Value of Card Advantage -> 1 card = 3 points
+Value of Trigger abilities (For card evaluation) -> %of two cards in 5 card hand * change in card value after applying trigger effect. 

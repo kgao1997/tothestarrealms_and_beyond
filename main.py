@@ -360,10 +360,10 @@ def list_actions(state):
             for card in curr_player.hand:
                 valid_actions.append(Action(ActName.DISCARD_HAND, card))
     for card in curr_player.in_play:
-        if card.play_function.function_name == FuncName.OR:
+        if card.play_function.function_name == FuncName.OR and curr_player.in_play.count(card) > curr_player.used.count(card):
             valid_actions.append(Action(ActName.ACTIVATE_EFFECT1, card))
             valid_actions.append(Action(ActName.ACTIVATE_EFFECT2, card))
-    # TODO: activate effect for optional effects (currently only have draw-->scrap)
+    # TODO: activate effect for optional effects (currently only have draw-->scrap, idk if there are any more)
     valid_actions.append(Action(ActName.END_TURN))
     '''   
     for action in valid_actions:   # print actions (for debugging)
@@ -536,7 +536,53 @@ def action(state, action):
             if card == trade_bot or card == missile_bot or card == supply_bot or card == patrol_mech or card == battle_mech or card == junkyard:
                 curr_player.used.append(card)
                 break
-    # TODO: activate effect (OR), copy ship, scrap hand (special), discard hand (special)
+    elif (action.action_name == ActName.ACTIVATE_EFFECT1):
+        if action.target == blob_world:   # NOTE: hardcoding b/c only six cards
+            curr_player.combat += 5
+        elif action.target == trading_post:
+            curr_player.authority += 1
+        elif action.target == barter_world:
+            curr_player.authority += 2
+        elif action.target == defense_center:
+            curr_player.authority += 3
+        elif action.target == patrol_mech:
+            curr_player.trade += 3
+        elif action.target == recycling_station:
+            curr_player.trade += 1
+        curr_player.used.append(action.target)
+    elif (action.action_name == ActName.ACTIVATE_EFFECT2):
+        if action.target == blob_world:   # DRAW_CARD_BLOB is handled here
+            blob_count = 0
+            for card in curr_player.in_play:   # NOTE: slightly inaccurate since bases may have been played on a previous turn
+                if card.card_faction == Faction.BLOB or card.card_faction == Faction.ALL:
+                    blob_count += 1
+            for i in range(blob_count):
+                if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
+                    curr_player.deck = curr_player.discard
+                    curr_player.discard = []
+                    random.shuffle(curr_player.deck)
+                new_card = curr_player.deck.pop()
+                curr_player.hand.append(new_card)
+        elif action.target == trading_post:
+            curr_player.trade += 1
+        elif action.target == barter_world:
+            curr_player.trade += 2
+        elif action.target == defense_center:
+            curr_player.combat += 2
+        elif action.target == patrol_mech:
+            curr_player.combat += 5
+        elif action.target == recycling_station:   # DISC_THEN_DRAW is handled here
+            for i in range(2):
+                if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
+                    curr_player.deck = curr_player.discard
+                    curr_player.discard = []
+                    random.shuffle(curr_player.deck)
+                new_card = curr_player.deck.pop()
+                curr_player.hand.append(new_card)
+            curr_player.num_to_discard += 2   # NOTE: doing DRAW_then_DISC for now because it's easier
+        curr_player.used.append(action.target)
+            
+    # TODO: copy ship, scrap hand (special), draw_then_scrap (special)
     elif (action.action_name == ActName.DISCARD_HAND):
         if (curr_player.num_to_discard > 0):
             curr_player.num_to_discard -= 1
@@ -655,18 +701,19 @@ def print_actions(act_list):
             print(action.action_name, action.target)
 
 #p0 = Player(authority = 50, deck = [], in_play = [blob_world, trading_post, barter_world, defense_center, patrol_mech, recycling_station], hand = [scout, scout, viper, corvette, cutter], combat = 0, trade = 0, discard = [scout, scout, scout, scout, scout, scout, viper], num_to_discard = 0, used = [])
-p0 = Player(authority = 50, deck = [scout, scout, scout, scout, viper], in_play = [], hand = [scout, scout, viper, scout, scout, fleet_hq], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [])
+p0 = Player(authority = 50, deck = [scout, scout, scout, scout, viper], in_play = [recycling_station], hand = [scout, scout, viper, scout, scout], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [])
 p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, viper, viper], in_play = [], hand = [], combat = 0, trade = 0, discard = [scout, scout, scout, trading_post], num_to_discard = 0)
 state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[explorer, battle_pod, supply_bot, stealth_needle, trade_escort, trade_bot], deck=[])
 
 print_state(state_example)
 #valid_functions(p0)
-#print_actions(list_actions(state_example))
+print_actions(list_actions(state_example))
 #new_state = action(state_example, Action(ActName.END_TURN))
-new_state = action(state_example, Action(ActName.PLAY_CARD, fleet_hq))
+#new_state = action(state_example, Action(ActName.PLAY_CARD, patrol_mech))
 #new_state = action(state_example, Action(ActName.BUY_CARD, blob_wheel))
+new_state = action(state_example, Action(ActName.ACTIVATE_EFFECT2, recycling_station))
 print_state(new_state)
-#list_actions(new_state)
+print_actions(list_actions(new_state))
 #action(state_example, Action(ActName.END_TURN))
 
 '''

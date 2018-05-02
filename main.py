@@ -224,7 +224,7 @@ def valid_functions(player):
     (blob_bonus, trade_bonus, mach_bonus, star_bonus) = faction_bonus(player)
     valid_functions = []
     for card in player.in_play:
-        if card not in player.used:   # if a card has been used, all effects have been activated, and all optional actions have been done TODO: multiple card in play
+        if card not in player.used or player.in_play.count(card) > player.used.count(card):   # if a card has been used, all effects have been activated, and all optional actions have been done   # NOTE: still buggy when listing actions, but should work for taking the correct number of actions
             if card.play_function.function_name != FuncName.NONE:
                 valid_functions.append(card.play_function)
             if card.play_function.function_name == FuncName.AND:
@@ -434,7 +434,27 @@ def action(state, action):
                 curr_player.authority += f.effect
             elif f.function_name == FuncName.OPP_DISCARD:
                 opp_player.num_to_discard += f.effect
-            # TODO: draw cards if blob, draw cards if base, ship powerup
+            elif f.function_name == FuncName.DRAW_CARDS_IF_BASE:
+                base_count = 0
+                for card in curr_player.in_play:
+                    if isinstance(card, Base) or isinstance(card, Landscape):
+                        base_count += 1
+                if base_count >= 2:
+                    for i in range(2):   # NOTE: all draw card functions can be factored into a common function
+                        if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
+                            curr_player.deck = curr_player.discard
+                            curr_player.discard = []
+                            random.shuffle(curr_player.deck)
+                        new_card = curr_player.deck.pop()
+                        curr_player.hand.append(new_card)
+            elif f.function_name == FuncName.SHIP_POWERUP:
+                for card in curr_player.in_play:
+                    if isinstance(card, Ship):
+                        curr_player.combat += 1
+                for card in curr_player.hand:   # NOTE: assumes that all ships in the hand will be played
+                    if isinstance(card, Ship):
+                        curr_player.combat += 1
+            # NOTE: draw cards for each blob played is treated as an active (OR) effect
     elif (action.action_name == ActName.BUY_CARD):
         state.trade_row.remove(action.target)
         if (action.target == explorer):
@@ -472,13 +492,13 @@ def action(state, action):
         elif f.function_name == FuncName.OPP_DISCARD:
             opp_player.num_to_discard += f.effect
         # TODO: missing AND, DESTROY_BASE
-        # TODO: this code is copied, should be factored out into common function
+        # NOTE: this code is copied, should be factored out into common function
     elif (action.action_name == ActName.SCRAP_TRADE_ROW):
         state.trade_row.remove(action.target)
         randCard = random_card()
         state.trade_row.append(randCard)   
         for card in curr_player.in_play:
-            if card == battle_pod or card == blob_destroyer:   # TODO: temp solution, would be better to add card backptrs to all functions and actions
+            if card == battle_pod or card == blob_destroyer:   # NOTE: temp solution, would be better to add card backptrs to all functions and actions
                 curr_player.used.append(card)
                 break
     elif (action.action_name == ActName.DESTROY_BASE):
@@ -560,7 +580,13 @@ def action(state, action):
                 opp_player.authority += f.effect
             elif f.function_name == FuncName.OPP_DISCARD:
                 curr_player.num_to_discard += f.effect
-            # TODO: draw cards if blob, draw cards if base, ship powerup
+            elif f.function_name == FuncName.SHIP_POWERUP:
+                for card in curr_player.in_play:
+                    if isinstance(card, Ship):
+                        curr_player.combat += 1
+                for card in curr_player.hand:   # NOTE: assumes that all ships in the hand will be played
+                    if isinstance(card, Ship):
+                        curr_player.combat += 1
 
     return state
 
@@ -629,21 +655,21 @@ def print_actions(act_list):
             print(action.action_name, action.target)
 
 #p0 = Player(authority = 50, deck = [], in_play = [blob_world, trading_post, barter_world, defense_center, patrol_mech, recycling_station], hand = [scout, scout, viper, corvette, cutter], combat = 0, trade = 0, discard = [scout, scout, scout, scout, scout, scout, viper], num_to_discard = 0, used = [])
-p0 = Player(authority = 50, deck = [scout, scout, scout, scout, viper], in_play = [], hand = [scout, scout, viper, scout, scout], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [])
+p0 = Player(authority = 50, deck = [scout, scout, scout, scout, viper], in_play = [], hand = [scout, scout, viper, scout, scout, fleet_hq], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [])
 p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, viper, viper], in_play = [], hand = [], combat = 0, trade = 0, discard = [scout, scout, scout, trading_post], num_to_discard = 0)
 state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[explorer, battle_pod, supply_bot, stealth_needle, trade_escort, trade_bot], deck=[])
-'''
+
 print_state(state_example)
 #valid_functions(p0)
-list_actions(state_example)
+#print_actions(list_actions(state_example))
 #new_state = action(state_example, Action(ActName.END_TURN))
-#new_state = action(state_example, Action(ActName.PLAY_CARD, cutter))
+new_state = action(state_example, Action(ActName.PLAY_CARD, fleet_hq))
 #new_state = action(state_example, Action(ActName.BUY_CARD, blob_wheel))
-#print_state(new_state)
+print_state(new_state)
 #list_actions(new_state)
 #action(state_example, Action(ActName.END_TURN))
-'''
 
+'''
 t = create_tree(state_example, d= 2, b= 10, func= eval_b, moves= None)
 actions,val = (t.minimaxAB(10, -math.inf, math.inf))
 print_actions(actions)
@@ -651,4 +677,4 @@ print ('optimal val of tree is ' + str(val))
 #print_state(t.value)
 #for s in t.children:
 #    print_state(s.value)
-   
+   '''

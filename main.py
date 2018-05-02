@@ -139,7 +139,7 @@ fleet_hq = Landscape(Function(FuncName.SHIP_POWERUP, effect=1), card_cost=8, car
 
 
 class Player:
-    def __init__(self, authority = 50, deck = [], in_play = [], hand = [], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [], copied = [], num_to_scrap = 0):
+    def __init__(self, authority = 50, deck = [], in_play = [], hand = [], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [], copied = [], num_to_scrap = 0, base_dest = 0):
         self.authority = authority
         self.deck = deck
         self.in_play = in_play  # includes cards played this turn and all active bases
@@ -151,6 +151,7 @@ class Player:
         self.used = used   # cards for which we have already used the optional ability
         self.copied = copied   # used to mark cards copied using the stealth needle
         self.num_to_scrap = num_to_scrap   # forced scraps within a turn
+        self.base_dest = base_dest   # number of bases player can destroy
 
 
 class Game: 
@@ -332,6 +333,10 @@ def list_actions(state):
     for card in curr_player.in_play:   # can scrap any card with a discard effect
         if card.discard_function.function_name != FuncName.NONE:
             valid_actions.append(Action(ActName.SCRAP_EFFECT, card))
+    if curr_player.base_dest > 0:   
+        for card in opp_player.in_play:
+            if isinstance(card, Base) or isinstance(card, Landscape):
+                valid_actions.append(Action(ActName.DESTROY_BASE, card))
     valid_funcs = valid_functions(curr_player)
     for f in valid_funcs:   # special effects: scrap a card in the trade row, destroy target base, etc.
         if f.function_name == FuncName.SCRAP_TRADE_ROW:
@@ -498,7 +503,14 @@ def action(state, action):
             curr_player.authority += f.effect
         elif f.function_name == FuncName.OPP_DISCARD:
             opp_player.num_to_discard += f.effect
-        # TODO: missing AND, DESTROY_BASE
+        elif f.function_name == FuncName.AND:   # NOTE: hardcoded for battlecruiser and port of call: draw cards and destroy a base
+            if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
+                curr_player.deck = curr_player.discard
+                curr_player.discard = []
+                random.shuffle(curr_player.deck)
+            new_card = curr_player.deck.pop()
+            curr_player.hand.append(new_card)
+            curr_player.base_dest += 1
         # NOTE: this code is copied, should be factored out into common function
     elif (action.action_name == ActName.SCRAP_TRADE_ROW):
         state.trade_row.remove(action.target)
@@ -511,10 +523,13 @@ def action(state, action):
     elif (action.action_name == ActName.DESTROY_BASE):
         opp_player.in_play.remove(action.target)
         opp_player.discard.append(action.target)
-        for card in curr_player.in_play:
-            if card == blob_destroyer or card == command_ship or card == missile_mech:   
-                curr_player.used.append(card)
-                break
+        if curr_player.base_dest > 0:
+            curr_player.base_dest -= 1
+        else:
+            for card in curr_player.in_play:
+                if card == blob_destroyer or card == command_ship or card == missile_mech:   
+                    curr_player.used.append(card)
+                    break
     elif (action.action_name == ActName.ACQUIRE_FREE_SHIP):
         state.trade_row.remove(action.target)
         if (action.target == explorer):
@@ -752,8 +767,8 @@ def print_actions(act_list):
             print(action.action_name, action.target)
 
 #p0 = Player(authority = 50, deck = [], in_play = [blob_world, trading_post, barter_world, defense_center, patrol_mech, recycling_station], hand = [scout, scout, viper, corvette, cutter], combat = 0, trade = 0, discard = [scout, scout, scout, scout, scout, scout, viper], num_to_discard = 0, used = [])
-p0 = Player(authority = 50, deck = [scout, scout, scout, scout, viper], in_play = [machine_base], hand = [scout, scout, viper, scout, scout], combat = 0, trade = 0, discard = [viper], num_to_discard = 0, used = [])
-p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, viper, viper], in_play = [], hand = [], combat = 0, trade = 0, discard = [scout, scout, scout, trading_post], num_to_discard = 0)
+p0 = Player(authority = 50, deck = [scout, scout, scout, scout, viper], in_play = [battlecruiser], hand = [scout, scout, viper, scout, scout], combat = 0, trade = 0, discard = [viper], num_to_discard = 0, used = [])
+p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, viper, viper], in_play = [barter_world, barter_world], hand = [], combat = 0, trade = 0, discard = [scout, scout, scout, trading_post], num_to_discard = 0)
 state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[explorer, battle_pod, supply_bot, stealth_needle, trade_escort, trade_bot], deck=[])
 
 print_state(state_example)
@@ -762,11 +777,12 @@ print_actions(list_actions(state_example))
 #new_state = action(state_example, Action(ActName.END_TURN))
 #new_state = action(state_example, Action(ActName.PLAY_CARD, patrol_mech))
 #new_state = action(state_example, Action(ActName.BUY_CARD, blob_wheel))
-new_state = action(state_example, Action(ActName.ACTIVATE_EFFECT, machine_base))
+#new_state = action(state_example, Action(ActName.ACTIVATE_EFFECT, machine_base))
+new_state = action(state_example, Action(ActName.SCRAP_EFFECT, battlecruiser))
 print_state(new_state)
 print_actions(list_actions(new_state))
 #action(state_example, Action(ActName.END_TURN))
-new_state = action(state_example, Action(ActName.SCRAP_HAND, viper))
+new_state = action(state_example, Action(ActName.DESTROY_BASE, barter_world))
 print_state(new_state)
 print_actions(list_actions(new_state))
 

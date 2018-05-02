@@ -78,7 +78,7 @@ def eval2(value):
 
 
 tree = GameTree('root', 7, eval2, [GameTree('A', 5, eval2, [GameTree('C', 1, eval2, []), GameTree('D', 2, eval2, [])]), GameTree('B', 6, eval2, [GameTree('E', 3, eval2, []), GameTree('F', 4, eval2, [])])])
-
+'''
 #tree.print_tree()
 print (tree.minimax(0))
 print (tree.minimax(1))
@@ -95,4 +95,4 @@ print (tree.minimaxAB(20, -10000, 10000))
 print (tree.maximinAB(0, -10000, 10000))
 print (tree.maximinAB(1, -10000, 10000))
 print (tree.maximinAB(20, -10000, 10000))
-
+'''

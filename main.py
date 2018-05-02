@@ -139,7 +139,7 @@ fleet_hq = Landscape(Function(FuncName.SHIP_POWERUP, effect=1), card_cost=8, car
 
 
 class Player:
-    def __init__(self, authority = 50, deck = [], in_play = [], hand = [], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = []):
+    def __init__(self, authority = 50, deck = [], in_play = [], hand = [], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [], copied = [], num_to_scrap = 0):
         self.authority = authority
         self.deck = deck
         self.in_play = in_play  # includes cards played this turn and all active bases
@@ -149,6 +149,8 @@ class Player:
         self.discard = discard   # discard pile
         self.num_to_discard = num_to_discard   # forced discards at beginning of turn
         self.used = used   # cards for which we have already used the optional ability
+        self.copied = copied   # used to mark cards copied using the stealth needle
+        self.num_to_scrap = num_to_scrap   # forced scraps within a turn
 
 
 class Game: 
@@ -176,6 +178,7 @@ class ActName(Enum):
     END_TURN = 13
     ACTIVATE_EFFECT1 = 14 # for activating between a choice of effects
     ACTIVATE_EFFECT2 = 15
+    SCRAP_THEN_DRAW = 16
 
 class Action:
     def __init__(self, act_name, target = None):
@@ -307,6 +310,10 @@ def list_actions(state):
         for card in curr_player.hand:
             valid_actions.append(Action(ActName.DISCARD_HAND, card))
         return valid_actions
+    if curr_player.num_to_scrap > 0:
+        for card in curr_player.hand:
+            valid_actions.append(Action(ActName.SCRAP_HAND, card))
+        return valid_actions
     for card in curr_player.hand:  # can play any card in your hand
         valid_actions.append(Action(ActName.PLAY_CARD, card))
     for card in state.trade_row:   # can buy any trade row card that you can afford
@@ -351,11 +358,11 @@ def list_actions(state):
             for card in curr_player.in_play:
                 if card == machine_base:
                     valid_actions.append(Action(ActName.ACTIVATE_EFFECT, card))
-        elif f.function_name == FuncName.SCRAP_THEN_DRAW:
+        elif f.function_name == FuncName.SCRAP_THEN_DRAW:   # NOTE: currently does not work for >1 card
             for card in curr_player.hand:
-                valid_actions.append(Action(ActName.SCRAP_HAND_DISC, card))
+                valid_actions.append(Action(ActName.SCRAP_THEN_DRAW, card))
             for card in curr_player.discard:
-                valid_actions.append(Action(ActName.SCRAP_HAND_DISC, card))
+                valid_actions.append(Action(ActName.SCRAP_THEN_DRAW, card))
         elif f.function_name == FuncName.DISC_THEN_DRAW:
             for card in curr_player.hand:
                 valid_actions.append(Action(ActName.DISCARD_HAND, card))
@@ -363,7 +370,7 @@ def list_actions(state):
         if card.play_function.function_name == FuncName.OR and curr_player.in_play.count(card) > curr_player.used.count(card):
             valid_actions.append(Action(ActName.ACTIVATE_EFFECT1, card))
             valid_actions.append(Action(ActName.ACTIVATE_EFFECT2, card))
-    # TODO: activate effect for optional effects (currently only have draw-->scrap, idk if there are any more)
+    # NOTE: may need more activate effect for optional effects (currently only have draw-->scrap, idk if there are any more)
     valid_actions.append(Action(ActName.END_TURN))
     '''   
     for action in valid_actions:   # print actions (for debugging)
@@ -581,8 +588,49 @@ def action(state, action):
                 curr_player.hand.append(new_card)
             curr_player.num_to_discard += 2   # NOTE: doing DRAW_then_DISC for now because it's easier
         curr_player.used.append(action.target)
-            
-    # TODO: copy ship, scrap hand (special), draw_then_scrap (special)
+    elif (action.action_name == ActName.COPY_SHIP):
+        curr_player.hand.append(action.target)   # add it to the hand so we can get the play bonuses
+        curr_player.copied.append(action.target)   # this will tell us to delete the copied card at the end of the turn
+        curr_player.used.append(stealth_needle)
+    elif (action.action_name == ActName.SCRAP_THEN_DRAW):
+        removed = False
+        for card in curr_player.discard:
+            if card == action.target:
+                curr_player.discard.remove(card)
+                removed = True
+                break
+        if not removed:
+            for card in curr_player.hand:
+                if card == action.target:
+                    curr_player.hand.remove(card)
+                    break
+        if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
+            curr_player.deck = curr_player.discard
+            curr_player.discard = []
+            random.shuffle(curr_player.deck)
+        new_card = curr_player.deck.pop()
+        curr_player.hand.append(new_card)
+        for card in curr_player.in_play:
+            if card == brain_world:
+                curr_player.used.append(card)
+                break
+    elif (action.action_name == ActName.ACTIVATE_EFFECT):
+        if action.target == machine_base:   # draw_then_scrap effect
+            if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
+                curr_player.deck = curr_player.discard
+                curr_player.discard = []
+                random.shuffle(curr_player.deck)
+            new_card = curr_player.deck.pop()
+            curr_player.hand.append(new_card)
+            curr_player.num_to_scrap += 1
+            curr_player.used.append(machine_base)
+    elif (action.action_name == ActName.SCRAP_HAND):
+        if (curr_player.num_to_scrap > 0):
+            curr_player.num_to_scrap -= 1
+        for card in curr_player.hand:
+            if card == action.target:
+                curr_player.hand.remove(card)
+                break
     elif (action.action_name == ActName.DISCARD_HAND):
         if (curr_player.num_to_discard > 0):
             curr_player.num_to_discard -= 1
@@ -599,6 +647,9 @@ def action(state, action):
         curr_player.combat = 0
         curr_player.trade = 0
         curr_player.used = []   # all cards used this turn can be used next turn
+        for card in curr_player.copied:
+            curr_player.discard.remove(card)
+        curr_player.copied = []
         state.current_player = (state.current_player + 1) % 2
         # opponent draws a hand, gains passive effects from bases currently in play
         for i in range(0, 5):
@@ -701,7 +752,7 @@ def print_actions(act_list):
             print(action.action_name, action.target)
 
 #p0 = Player(authority = 50, deck = [], in_play = [blob_world, trading_post, barter_world, defense_center, patrol_mech, recycling_station], hand = [scout, scout, viper, corvette, cutter], combat = 0, trade = 0, discard = [scout, scout, scout, scout, scout, scout, viper], num_to_discard = 0, used = [])
-p0 = Player(authority = 50, deck = [scout, scout, scout, scout, viper], in_play = [recycling_station], hand = [scout, scout, viper, scout, scout], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [])
+p0 = Player(authority = 50, deck = [scout, scout, scout, scout, viper], in_play = [machine_base], hand = [scout, scout, viper, scout, scout], combat = 0, trade = 0, discard = [viper], num_to_discard = 0, used = [])
 p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, viper, viper], in_play = [], hand = [], combat = 0, trade = 0, discard = [scout, scout, scout, trading_post], num_to_discard = 0)
 state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[explorer, battle_pod, supply_bot, stealth_needle, trade_escort, trade_bot], deck=[])
 
@@ -711,10 +762,14 @@ print_actions(list_actions(state_example))
 #new_state = action(state_example, Action(ActName.END_TURN))
 #new_state = action(state_example, Action(ActName.PLAY_CARD, patrol_mech))
 #new_state = action(state_example, Action(ActName.BUY_CARD, blob_wheel))
-new_state = action(state_example, Action(ActName.ACTIVATE_EFFECT2, recycling_station))
+new_state = action(state_example, Action(ActName.ACTIVATE_EFFECT, machine_base))
 print_state(new_state)
 print_actions(list_actions(new_state))
 #action(state_example, Action(ActName.END_TURN))
+new_state = action(state_example, Action(ActName.SCRAP_HAND, viper))
+print_state(new_state)
+print_actions(list_actions(new_state))
+
 
 '''
 t = create_tree(state_example, d= 2, b= 10, func= eval_b, moves= None)

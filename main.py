@@ -720,8 +720,8 @@ def action(state, action):
 # large for each state (there are many combinations of actions). Thus we will try randomly
 # sampling b random actions for each state, and performing game tree search on the 
 # resulting tree. Note that each action is a sequence of moves, ending in END_TURN.
-# TODO: there are porbably smarter ways of generating actions, eg. play all cards first, 
-# always complete all possible actions before selecting END_TURN, etc.
+# NOTE: there are probably smarter ways of generating actions, eg. play all cards first, 
+# always complete all possible actions before selecting END_TURN, etc. (see below)
 # Problem: some actions depend on random results from previous actions. For example, if 
 # you play a card which lets you draw a card, and then play that drawn card. If game tree
 # search returns this as the optimal sequence of actions, then performing the same
@@ -756,6 +756,42 @@ def create_tree(s, d, b, func, moves):
 
     return GameTree(l = moves, v = s, f = func, c = children)
 
+# Attempting to create a smarter game tree by reducing the number of actions
+# that we will search through by random chance.
+# Assumption #1: immediately play all cards at the beginning of the turn
+# ideas: always attack opponent when possible
+#        always buy a card when possible (?)
+#        always use a special effect when possible (???)
+def create_treeB(s, d, b, func, moves):
+    if (d == 0):   # base case
+        return GameTree(l = moves, v = s, f = func, c = [])
+    children = []   # recursive case
+    #actions_to_children = []
+    for i in range(0,b):
+        state = copy.deepcopy(s)   
+        pos_actions = list_actions(state)
+        move_seq = []
+        while(all(move.action_name != ActName.END_TURN for move in move_seq)):
+            done = False
+            for a in pos_actions:
+                if a.action_name == ActName.PLAY_CARD:
+                    nextAct = a
+                    move_seq.append(nextAct)
+                    state = action(state, nextAct)
+                    pos_actions = list_actions(state)
+                    done = True
+                    break
+            if not done:
+                randAct = pos_actions[random.randint(0, len(pos_actions) - 1)]
+                move_seq.append(randAct)
+                state = action(state, randAct)
+                pos_actions = list_actions(state)
+        child_tree = create_tree(state, d-1, b, func, move_seq)   
+        children.append(child_tree)
+        #actions_to_children.append(move_seq)
+    return GameTree(l = moves, v = s, f = func, c = children)
+
+
 # dummy eval
 def eval_a(state):
     return 0
@@ -778,10 +814,10 @@ def print_actions(act_list):
             print(action.action_name, action.target)
 
 #p0 = Player(authority = 50, deck = [], in_play = [blob_world, trading_post, barter_world, defense_center, patrol_mech, recycling_station], hand = [scout, scout, viper, corvette, cutter], combat = 0, trade = 0, discard = [scout, scout, scout, scout, scout, scout, viper], num_to_discard = 0, used = [])
-p0 = Player(authority = 50, deck = [scout, scout, scout, scout, viper], in_play = [barter_world], hand = [scout, scout, viper, scout, scout, freighter], combat = 0, trade = 2, discard = [viper], num_to_discard = 0, used = [])
-p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, viper, viper], in_play = [barter_world, barter_world], hand = [], combat = 0, trade = 0, discard = [scout, scout, scout, trading_post], num_to_discard = 0)
+p0 = Player(authority = 50, deck = [scout, scout, scout, scout, viper], in_play = [], hand = [scout, scout, viper, scout, scout], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [])
+p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, viper, viper], in_play = [], hand = [], combat = 0, trade = 0, discard = [scout, scout, scout, trading_post], num_to_discard = 0)
 state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[explorer, battle_pod, supply_bot, stealth_needle, trade_escort, trade_bot], deck=[])
-
+'''
 print_state(state_example)
 #valid_functions(p0)
 print_actions(list_actions(state_example))
@@ -797,14 +833,14 @@ print_actions(list_actions(new_state))
 #new_state = action(state_example, Action(ActName.DESTROY_BASE, barter_world))
 #print_state(new_state)
 #print_actions(list_actions(new_state))
-
-
 '''
-t = create_tree(state_example, d= 2, b= 10, func= eval_b, moves= None)
+
+
+t = create_treeB(state_example, d= 2, b= 10, func= eval_b, moves= None)   # can modify: how we create tree, depth, b-factor, eval-func
 actions,val = (t.minimaxAB(10, -math.inf, math.inf))
 print_actions(actions)
 print ('optimal val of tree is ' + str(val))
 #print_state(t.value)
 #for s in t.children:
 #    print_state(s.value)
-   '''
+   

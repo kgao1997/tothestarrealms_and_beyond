@@ -139,8 +139,9 @@ fleet_hq = Landscape(Function(FuncName.SHIP_POWERUP, effect=1), card_cost=8, car
 
 
 class Player:
-    def __init__(self, authority = 50, deck = [], in_play = [], hand = [], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [], copied = [], num_to_scrap = 0, base_dest = 0, ship_top = 0):
+    def __init__(self, name = '', authority = 50, deck = [], in_play = [], hand = [], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [], copied = [], num_to_scrap = 0, base_dest = 0, ship_top = 0):
         self.authority = authority
+        self.name = name
         self.deck = deck
         self.in_play = in_play  # includes cards played this turn and all active bases
         self.hand = hand
@@ -255,7 +256,7 @@ def valid_functions(player):
 
 # print the info for a state
 def print_state(state):
-    print ('cuurent player is ' + str(state.current_player))
+    print ('cuurent player is ' + str(state.current_player) + ' (' + state.player_list[state.current_player].name + ')')
     p0 = state.player_list[0]
     p1 = state.player_list[1]
     trade = ''
@@ -395,14 +396,18 @@ def random_card():
     return cards[randInt]
 
 # Given a state and an action, return a new state
-def action(state, action):
+def exec_action(state, action):
     curr_player = state.player_list[state.current_player]
     opp_player = state.player_list[(state.current_player + 1) % 2]
     valid_actions = list_actions(state)  # use this to check if action is valid
     valid = False
     for a in valid_actions:
-        if action.action_name == a.action_name and action.target == a.target:
-            valid = True
+        if (isinstance(a.target, Ship) or isinstance(a.target, Base) or isinstance(a.target, Landscape)) and (isinstance(action.target, Ship) or isinstance(action.target, Base) or isinstance(action.target, Landscape)):
+            if action.action_name == a.action_name and action.target.card_name == a.target.card_name:
+                valid = True
+        else:
+            if action.action_name == a.action_name and action.target == action.target:
+                valid = True
     if not valid:
         raise ValueError
     if (action.action_name == ActName.PLAY_CARD):
@@ -437,12 +442,13 @@ def action(state, action):
                 curr_player.combat += f.effect
             elif f.function_name == FuncName.DRAW_CARDS:
                 for i in range(f.effect):
-                    if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
+                    if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck                         
                         curr_player.deck = curr_player.discard
                         curr_player.discard = []
                         random.shuffle(curr_player.deck)
-                    new_card = curr_player.deck.pop()
-                    curr_player.hand.append(new_card)
+                    if len(curr_player.deck) > 0:   #TODO: factor into common func so this bug fix can be implemented
+                        new_card = curr_player.deck.pop()
+                        curr_player.hand.append(new_card)
             elif f.function_name == FuncName.ADD_INFL:
                 curr_player.authority += f.effect
             elif f.function_name == FuncName.OPP_DISCARD:
@@ -670,7 +676,11 @@ def action(state, action):
         curr_player.trade = 0
         curr_player.used = []   # all cards used this turn can be used next turn
         for card in curr_player.copied:
-            curr_player.discard.remove(card)
+            try:
+                curr_player.discard.remove(card)
+                break
+            except ValueError:
+                print("copied chip not found in discard!")   # TODO: getting a weird bug where a copied ship is not found in discard
         curr_player.copied = []
         curr_player.base_dest = 0
         curr_player.ship_top = 0
@@ -713,6 +723,57 @@ def action(state, action):
 
     return state
 
+# due to the way I encoded actions, I need a way to copy a player state while keeping the same card objects
+# This was my mistake. I used specific objects as action targets, which made actions incompatible when
+# the states were deepcopied. As we know, when objects are copied, they cannot be directly compared anymore.
+def copy(state):
+    p0 = state.player_list[0]
+    newdeck = []
+    for c in p0.deck:
+        newdeck.append(c)
+    new_in_play = []
+    for c in p0.in_play:
+        new_in_play.append(c)
+    newhand = []
+    for c in p0.hand:
+        newhand.append(c)
+    new_discard = []
+    for c in p0.discard:
+        new_discard.append(c)
+    new_used = []
+    for c in p0.used:
+        new_used.append(c)
+    new_copied = []
+    for c in p0.copied:
+        new_copied.append(c)
+    newp0 = Player(p0.name, p0.authority, newdeck, new_in_play, newhand, p0.combat, p0.trade, new_discard, p0.num_to_discard, new_used, new_copied, p0.num_to_scrap, p0.base_dest, p0.ship_top)
+    p1 = state.player_list[1]
+    newdeck1 = []
+    for c in p1.deck:
+        newdeck1.append(c)
+    new_in_play1 = []
+    for c in p1.in_play:
+        new_in_play1.append(c)
+    newhand1 = []
+    for c in p1.hand:
+        newhand1.append(c)
+    new_discard1 = []
+    for c in p1.discard:
+        new_discard1.append(c)
+    new_used1 = []
+    for c in p1.used:
+        new_used1.append(c)
+    new_copied1 = []
+    for c in p1.copied:
+        new_copied1.append(c)
+    newp1 = Player(p1.name, p1.authority, newdeck1, new_in_play1, newhand1, p1.combat, p1.trade, new_discard1, p1.num_to_discard, new_used1, new_copied1, p1.num_to_scrap, p1.base_dest, p1.ship_top)
+    new_trade_row = []
+    for c in state.trade_row:
+        new_trade_row.append(c)
+    return Game(state.current_player, [newp0, newp1], new_trade_row, [])
+
+
+
 # Create a game tree starting from state s, to depth d, with branching factor b
 # Use heuristic function f for game tree search
 # Use moves as label for this node
@@ -727,7 +788,9 @@ def action(state, action):
 # search returns this as the optimal sequence of actions, then performing the same
 # sequence of actions may not lead to the same card drawn, and thus will not lead to 
 # the same state. Game tree seach does not seem suited for nondeterministic events
-# like these.
+# like these. In general, it seems difficult to adapt game tree search when each action
+# is actually a series of moves. It is thus not clear if this method will provide any 
+# benefits above hardcoding a strategy.
 def create_tree(s, d, b, func, moves):
     if (d == 0):   # base case
         return GameTree(l = moves, v = s, f = func, c = [])
@@ -735,13 +798,14 @@ def create_tree(s, d, b, func, moves):
     children = []   # recursive case
     #actions_to_children = []
     for i in range(0,b):
-        state = copy.deepcopy(s)   
+        #state = copy.deepcopy(s)    I wish I could do this, but the way I wrote the actions means that the cards have to be the same
+        state = copy(s)
         pos_actions = list_actions(state)
         move_seq = []
         while(all(move.action_name != ActName.END_TURN for move in move_seq)):
             randAct = pos_actions[random.randint(0, len(pos_actions) - 1)]
             move_seq.append(randAct)
-            state = action(state, randAct)
+            state = exec_action(state, randAct)
             pos_actions = list_actions(state)
         child_tree = create_tree(state, d-1, b, func, move_seq)
         '''    
@@ -762,13 +826,14 @@ def create_tree(s, d, b, func, moves):
 # ideas: always attack opponent when possible
 #        always buy a card when possible (?)
 #        always use a special effect when possible (???)
-def create_treeB(s, d, b, func, moves):
+def create_tree2(s, d, b, func, moves):
     if (d == 0):   # base case
         return GameTree(l = moves, v = s, f = func, c = [])
     children = []   # recursive case
     #actions_to_children = []
     for i in range(0,b):
-        state = copy.deepcopy(s)   
+        #state = copy.deepcopy(s)   
+        state = copy(s)
         pos_actions = list_actions(state)
         move_seq = []
         while(all(move.action_name != ActName.END_TURN for move in move_seq)):
@@ -777,14 +842,14 @@ def create_treeB(s, d, b, func, moves):
                 if a.action_name == ActName.PLAY_CARD:
                     nextAct = a
                     move_seq.append(nextAct)
-                    state = action(state, nextAct)
+                    state = exec_action(state, nextAct)
                     pos_actions = list_actions(state)
                     done = True
                     break
             if not done:
                 randAct = pos_actions[random.randint(0, len(pos_actions) - 1)]
                 move_seq.append(randAct)
-                state = action(state, randAct)
+                state = exec_action(state, randAct)
                 pos_actions = list_actions(state)
         child_tree = create_tree(state, d-1, b, func, move_seq)   
         children.append(child_tree)
@@ -813,11 +878,103 @@ def print_actions(act_list):
         else:
             print(action.action_name, action.target)
 
+# AI vs. AI mode
+# For each AI, we use the given create_tree function, depth of tree, branching factor of tree, and eval function for tree
+# Initial state is randomized, including which AI goes first. This seeks to find an equal comparison between each AI.
+# NOTE: In a real life system, the AI would choose an optimal set of moves, and then attempt to execute the 
+# moves (which may or may not succeed, due to the randomness associated with actions such as drawing cards.) To simplify
+# our system, we might assume that the sequence of actions always leads to the state specified in the game tree. This
+# is not the same testing we would do as facing the in-game AI. This assumption should still allow us to compare the merits
+# of different AIs, since this will test which types of game states should be favored.
+# After some investigation, the probability of a failed action seems rather small (?)
+def AIvAI(create_treeA, depthA, branchA, funcA, create_treeB, depthB, branchB, funcB):
+    deckA = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper]
+    deckB = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper]
+    random.shuffle(deckA)
+    random.shuffle(deckB)
+    handA = []
+    handB = []
+    # decide whether A or B will go first
+    # player 0 draws a 3 card hand and goes first
+    randInt = random.randint(0,1)
+    if randInt == 0:
+        for i in range(0,3):
+            handA.append(deckA.pop())
+    elif randInt == 1:
+        for i in range(0,3):
+            handB.append(deckB.pop()) 
+    pA = Player(name = 'A', authority = 50, deck = deckA, in_play = [], hand = handA, combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [])
+    pB = Player(name = 'B', authority = 50, deck = deckB, in_play = [], hand = handB, combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [])
+    player_list = [pA, pB]
+    trade_row = [explorer]
+    for i in range(0, 5):
+        randCard = random_card()
+        trade_row.append(randCard)
+    state = Game(randInt, player_list, trade_row, [])
+    #print_state(init_state)
+    turn_ctr = 0
+    while (True):
+        turn_ctr += 1
+        if state.current_player == 0:
+            treeA = create_treeA(state, depthA, branchA, funcA, None)
+            actions, _ = treeA.minimaxAB(math.inf, -math.inf, math.inf)
+            #print("CHOSEN ACTIONS")
+            #print_actions(actions)
+            #print("VALID ACTIONS")
+            #print_actions(list_actions(state))
+            for a in actions:
+                try:
+                    new_state = exec_action(state, a)
+                    #print("NEW STATE")
+                    #print_state(new_state)
+                    state = new_state
+                    break
+                except ValueError:   
+                    # TODO: we tried an action which isn't possible due to RNG. should we continue with the other actions (since there may be good stuff)
+                    # or give up on the sequence entirely? (since later actions will probably depend on this one)
+                    print('action failed!')
+                    pass
+            pA_auth = state.player_list[0].authority
+            pB_auth = state.player_list[1].authority
+            print ('Turn {}: PA has {} influence and PB has {} influence'.format(turn_ctr, pA_auth, pB_auth))
+            #print_state(state)
+            if pB_auth <= 0:
+                print ('Player A wins! PA had {} influence and PB had {} influence'.format(pA_auth, pB_auth))
+                print_state(state)
+                break
+        if state.current_player == 1:
+            treeB = create_treeB(state, depthB, branchB, funcB, None)
+            actions, _ = treeB.minimaxAB(math.inf, -math.inf, math.inf)
+            for a in actions:
+                try:
+                    new_state = exec_action(state, a)
+                    state = new_state
+                    break
+                except ValueError:   
+                    # TODO: we tried an action which isn't possible due to RNG. should we continue with the other actions (since there may be good stuff)
+                    # or give up on the sequence entirely? (since later actions will probably depend on this one)
+                    print('action failed!')
+                    pass
+            pA_auth = state.player_list[0].authority
+            pB_auth = state.player_list[1].authority
+            print ('Turn {}: PA has {} influence and PB has {} influence'.format(turn_ctr, pA_auth, pB_auth))
+            #print_state(state)
+            if pA_auth <= 0:
+                print ('Player B wins! PB had {} influence and PA had {} influence'.format(pB_auth, pA_auth))
+                print_state(state)
+                break
+
+
+
+AIvAI(create_tree2, 2, 10, eval_b, create_tree2, 2, 2, eval_b)
+
+
+'''
 #p0 = Player(authority = 50, deck = [], in_play = [blob_world, trading_post, barter_world, defense_center, patrol_mech, recycling_station], hand = [scout, scout, viper, corvette, cutter], combat = 0, trade = 0, discard = [scout, scout, scout, scout, scout, scout, viper], num_to_discard = 0, used = [])
 p0 = Player(authority = 50, deck = [scout, scout, scout, scout, viper], in_play = [], hand = [scout, scout, viper, scout, scout], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [])
 p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, viper, viper], in_play = [], hand = [], combat = 0, trade = 0, discard = [scout, scout, scout, trading_post], num_to_discard = 0)
 state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[explorer, battle_pod, supply_bot, stealth_needle, trade_escort, trade_bot], deck=[])
-'''
+
 print_state(state_example)
 #valid_functions(p0)
 print_actions(list_actions(state_example))
@@ -835,7 +992,7 @@ print_actions(list_actions(new_state))
 #print_actions(list_actions(new_state))
 '''
 
-
+'''
 t = create_treeB(state_example, d= 2, b= 10, func= eval_b, moves= None)   # can modify: how we create tree, depth, b-factor, eval-func
 actions,val = (t.minimaxAB(10, -math.inf, math.inf))
 print_actions(actions)
@@ -843,4 +1000,4 @@ print ('optimal val of tree is ' + str(val))
 #print_state(t.value)
 #for s in t.children:
 #    print_state(s.value)
-   
+'''   

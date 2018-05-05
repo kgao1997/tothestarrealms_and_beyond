@@ -395,6 +395,16 @@ def random_card():
     randInt = random.randint(0, len(cards)-1)
     return cards[randInt]
 
+# Player draws a card
+def draw_card(player):
+    if len(player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck                         
+        player.deck = player.discard
+        player.discard = []
+        random.shuffle(player.deck)
+    if len(player.deck) > 0:   
+        new_card = player.deck.pop()
+        player.hand.append(new_card)
+
 # Given a state and an action, return a new state
 def exec_action(state, action):
     curr_player = state.player_list[state.current_player]
@@ -442,13 +452,7 @@ def exec_action(state, action):
                 curr_player.combat += f.effect
             elif f.function_name == FuncName.DRAW_CARDS:
                 for i in range(f.effect):
-                    if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck                         
-                        curr_player.deck = curr_player.discard
-                        curr_player.discard = []
-                        random.shuffle(curr_player.deck)
-                    if len(curr_player.deck) > 0:   #TODO: factor into common func so this bug fix can be implemented
-                        new_card = curr_player.deck.pop()
-                        curr_player.hand.append(new_card)
+                    draw_card(curr_player)
             elif f.function_name == FuncName.ADD_INFL:
                 curr_player.authority += f.effect
             elif f.function_name == FuncName.OPP_DISCARD:
@@ -459,13 +463,8 @@ def exec_action(state, action):
                     if isinstance(card, Base) or isinstance(card, Landscape):
                         base_count += 1
                 if base_count >= 2:
-                    for i in range(2):   # NOTE: all draw card functions can be factored into a common function
-                        if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
-                            curr_player.deck = curr_player.discard
-                            curr_player.discard = []
-                            random.shuffle(curr_player.deck)
-                        new_card = curr_player.deck.pop()
-                        curr_player.hand.append(new_card)
+                    for i in range(2):   
+                        draw_card(curr_player)
             elif f.function_name == FuncName.SHIP_POWERUP:
                 for card in curr_player.in_play:
                     if isinstance(card, Ship):
@@ -506,23 +505,13 @@ def exec_action(state, action):
             curr_player.combat += f.effect
         elif f.function_name == FuncName.DRAW_CARDS:
             for i in range(f.effect):
-                if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
-                    curr_player.deck = curr_player.discard
-                    curr_player.discard = []
-                    random.shuffle(curr_player.deck)
-                new_card = curr_player.deck.pop()
-                curr_player.hand.append(new_card)
+                draw_card(curr_player)
         elif f.function_name == FuncName.ADD_INFL:
             curr_player.authority += f.effect
         elif f.function_name == FuncName.OPP_DISCARD:
             opp_player.num_to_discard += f.effect
         elif f.function_name == FuncName.AND:   # NOTE: hardcoded for battlecruiser and port of call: draw cards and destroy a base
-            if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
-                curr_player.deck = curr_player.discard
-                curr_player.discard = []
-                random.shuffle(curr_player.deck)
-            new_card = curr_player.deck.pop()
-            curr_player.hand.append(new_card)
+            draw_card(curr_player)
             curr_player.base_dest += 1
         # NOTE: this code is copied, should be factored out into common function
     elif (action.action_name == ActName.SCRAP_TRADE_ROW):
@@ -592,12 +581,7 @@ def exec_action(state, action):
                 if card.card_faction == Faction.BLOB or card.card_faction == Faction.ALL:
                     blob_count += 1
             for i in range(blob_count):
-                if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
-                    curr_player.deck = curr_player.discard
-                    curr_player.discard = []
-                    random.shuffle(curr_player.deck)
-                new_card = curr_player.deck.pop()
-                curr_player.hand.append(new_card)
+                draw_card(curr_player)
         elif action.target == trading_post:
             curr_player.trade += 1
         elif action.target == barter_world:
@@ -608,12 +592,7 @@ def exec_action(state, action):
             curr_player.combat += 5
         elif action.target == recycling_station:   # DISC_THEN_DRAW is handled here
             for i in range(2):
-                if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
-                    curr_player.deck = curr_player.discard
-                    curr_player.discard = []
-                    random.shuffle(curr_player.deck)
-                new_card = curr_player.deck.pop()
-                curr_player.hand.append(new_card)
+                draw_card(curr_player)
             curr_player.num_to_discard += 2   # NOTE: doing DRAW_then_DISC for now because it's easier
         curr_player.used.append(action.target)
     elif (action.action_name == ActName.COPY_SHIP):
@@ -632,24 +611,14 @@ def exec_action(state, action):
                 if card == action.target:
                     curr_player.hand.remove(card)
                     break
-        if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
-            curr_player.deck = curr_player.discard
-            curr_player.discard = []
-            random.shuffle(curr_player.deck)
-        new_card = curr_player.deck.pop()
-        curr_player.hand.append(new_card)
+        draw_card(curr_player)
         for card in curr_player.in_play:
             if card == brain_world:
                 curr_player.used.append(card)
                 break
     elif (action.action_name == ActName.ACTIVATE_EFFECT):
         if action.target == machine_base:   # draw_then_scrap effect
-            if len(curr_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
-                curr_player.deck = curr_player.discard
-                curr_player.discard = []
-                random.shuffle(curr_player.deck)
-            new_card = curr_player.deck.pop()
-            curr_player.hand.append(new_card)
+            draw_card(curr_player)
             curr_player.num_to_scrap += 1
             curr_player.used.append(machine_base)
     elif (action.action_name == ActName.SCRAP_HAND):
@@ -687,12 +656,7 @@ def exec_action(state, action):
         state.current_player = (state.current_player + 1) % 2
         # opponent draws a hand, gains passive effects from bases currently in play
         for i in range(0, 5):
-            if len(opp_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
-                opp_player.deck = opp_player.discard
-                opp_player.discard = []
-                random.shuffle(opp_player.deck)
-            new_card = opp_player.deck.pop()   
-            opp_player.hand.append(new_card)
+            draw_card(opp_player)
         funcs = valid_functions(opp_player)
         for f in funcs:   # activate all functions that are passive effects
             if f.function_name == FuncName.ADD_TRADE:
@@ -701,12 +665,7 @@ def exec_action(state, action):
                    opp_player.combat += f.effect
             elif f.function_name == FuncName.DRAW_CARDS:
                 for i in range(f.effect):
-                    if len(opp_player.deck) == 0:   # once deck is empty, reshuffle discard pile into deck
-                        opp_player.deck = opp_player.discard
-                        opp_player.discard = []
-                        random.shuffle(opp_player.deck)
-                    new_card = opp_player.deck.pop()
-                    opp_player.hand.append(new_card)
+                    draw_card(opp_player)
             elif f.function_name == FuncName.ADD_INFL:
                 opp_player.authority += f.effect
             elif f.function_name == FuncName.OPP_DISCARD:
@@ -971,7 +930,7 @@ AIvAI(create_tree2, 2, 10, eval_b, create_tree2, 2, 2, eval_b)
 
 '''
 #p0 = Player(authority = 50, deck = [], in_play = [blob_world, trading_post, barter_world, defense_center, patrol_mech, recycling_station], hand = [scout, scout, viper, corvette, cutter], combat = 0, trade = 0, discard = [scout, scout, scout, scout, scout, scout, viper], num_to_discard = 0, used = [])
-p0 = Player(authority = 50, deck = [scout, scout, scout, scout, viper], in_play = [], hand = [scout, scout, viper, scout, scout], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [])
+p0 = Player(authority = 50, deck = [], in_play = [], hand = [scout, scout, viper, scout, scout, corvette], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [])
 p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, viper, viper], in_play = [], hand = [], combat = 0, trade = 0, discard = [scout, scout, scout, trading_post], num_to_discard = 0)
 state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[explorer, battle_pod, supply_bot, stealth_needle, trade_escort, trade_bot], deck=[])
 
@@ -979,9 +938,9 @@ print_state(state_example)
 #valid_functions(p0)
 print_actions(list_actions(state_example))
 #new_state = action(state_example, Action(ActName.END_TURN))
-new_state = action(state_example, Action(ActName.PLAY_CARD, freighter))
-new_state = action(state_example, Action(ActName.BUY_CARD, explorer))
-new_state = action(state_example, Action(ActName.BUY_CARD, stealth_needle))
+new_state = exec_action(state_example, Action(ActName.PLAY_CARD, corvette))
+#new_state = action(state_example, Action(ActName.BUY_CARD, explorer))
+#new_state = action(state_example, Action(ActName.BUY_CARD, stealth_needle))
 #new_state = action(state_example, Action(ActName.ACTIVATE_EFFECT, machine_base))
 #new_state = action(state_example, Action(ActName.SCRAP_EFFECT, battlecruiser))
 print_state(new_state)

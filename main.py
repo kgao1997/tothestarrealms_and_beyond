@@ -781,10 +781,11 @@ def create_tree(s, d, b, func, moves):
 
 # Attempting to create a smarter game tree by reducing the number of actions
 # that we will search through by random chance.
-# Assumption #1: immediately play all cards at the beginning of the turn
-# ideas: always attack opponent when possible
-#        always buy a card when possible (?)
-#        always use a special effect when possible (???)
+# TODO: A lot of strategy can be encoded in the way actions are randomly selected
+# Assumption #1: immediately play all cards at the beginning of the turn [possible drawback if you want to scrap a card from your hand]
+# ideas: always attack opponent when possible [possible drawback is that attacking opponent may be favored over attacking base]
+#        always buy a card when possible (?) [may favor buying small-valued cards]
+#        always use a special effect when possible (???) [some effects should not be taken, like scrapping a good card]
 def create_tree2(s, d, b, func, moves):
     if (d == 0):   # base case
         return GameTree(l = moves, v = s, f = func, c = [])
@@ -799,6 +800,14 @@ def create_tree2(s, d, b, func, moves):
             done = False
             for a in pos_actions:
                 if a.action_name == ActName.PLAY_CARD:
+                    nextAct = a
+                    move_seq.append(nextAct)
+                    state = exec_action(state, nextAct)
+                    pos_actions = list_actions(state)
+                    done = True
+                    break
+            for a in pos_actions:
+                if a.action_name == ActName.ATTACK:
                     nextAct = a
                     move_seq.append(nextAct)
                     state = exec_action(state, nextAct)
@@ -829,6 +838,80 @@ def eval_b(state):
     c = len(curr_player.deck) + len(curr_player.discard)
     return a+b+c
 
+# everything is pretty arbitrary, based on my limited plying experience
+def eval_function(function):
+    if function is None:
+        return 0
+    if function.function_name == FuncName.ADD_TRADE:
+        return int(function.effect)
+    elif function.function_name == FuncName.ADD_COMBAT:
+        return int(function.effect)
+    elif function.function_name == FuncName.DRAW_CARDS:
+        return 3 * int(function.effect)
+    elif function.function_name == FuncName.SCRAP_TRADE_ROW:
+        return 2
+    elif function.function_name == FuncName.DESTROY_BASE:
+        return 5
+    elif function.function_name == FuncName.ACQUIRE_FREE_SHIP:
+        return 4
+    elif function.function_name == FuncName.SHIP_TO_TOP_DECK:
+        return 2
+    elif function.function_name == FuncName.DRAW_CARD_BLOB:   # probably should be dependent on number of blob in your deck
+        return 5
+    elif function.function_name == FuncName.ADD_INFL:
+        return int(function.effect)
+    elif function.function_name == FuncName.DRAW_CARDS_IF_BASE:
+        return 4
+    elif function.function_name == FuncName.SCRAP_HAND_DISC:
+        return 5
+    elif function.function_name == FuncName.COPY_SHIP:
+        return 5
+    elif function.function_name == FuncName.DRAW_THEN_SCRAP:
+        return 5
+    elif function.function_name == FuncName.SCRAP_THEN_DRAW:
+        return 7
+    elif function.function_name == FuncName.OPP_DISCARD:
+        return 3 * int(function.effect)
+    elif function.function_name == FuncName.DISC_THEN_DRAW:
+        return 5
+    elif function.function_name == FuncName.SHIP_POWERUP:
+        return 6
+    elif function.function_name == FuncName.AND:
+        return eval_function(function.func1) + eval_function(function.func2) + eval_function(function.func3)
+    elif function.function_name == FuncName.OR:
+        return max(eval_function(function.func1), eval_function(function.func2))
+    elif function.function_name == FuncName.NONE:
+        return 0
+
+# still pretty arbitrary
+def eval_card(card):
+    value = 0
+    value += eval_function(card.play_function)
+    value += 0.5 * eval_function(card.faction_function)
+    value += 0.5 * eval_function(card.discard_function)
+    # TODO: do something with faction, maybe have faction-favored decks
+    if isinstance(card, Base) or isinstance(card, Landscape):
+        value += card.card_shield
+    return value
+
+# Attempt at a good eval function. The goal is to achieve the greatest density of good cards in your deck.
+# Evaluate the state from the perspective of the current player
+# TODO: minimax doesn't work if all evaluations are done from the current player's perspective.
+def eval_c(state):
+    curr_player = state.player_list[state.current_player]
+    opp_player = state.player_list[(state.current_player + 1) % 2]
+    auth_diff = curr_player.authority - opp_player.authority
+    deck_val = 0
+    for card in curr_player.deck:
+        deck_val += eval_card(card)
+    for card in curr_player.discard:
+        deck_val += eval_card(card)
+    deck_val /= len(curr_player.deck) + len(curr_player.discard)   # avg value of deck
+    play_val = 0
+    for card in curr_player.in_play:
+        play_val += eval_card(card)   # bonuses for bases in play
+    return auth_diff + deck_val + play_val   # TODO: normalize
+
 #print actions
 def print_actions(act_list):
     for action in act_list: 
@@ -846,6 +929,7 @@ def print_actions(act_list):
 # is not the same testing we would do as facing the in-game AI. This assumption should still allow us to compare the merits
 # of different AIs, since this will test which types of game states should be favored.
 # After some investigation, the probability of a failed action seems rather small (?)
+# TODO: for minimax to work properly, one player should be fixed to go first, and minimax should be evaluated from that player's perspective
 def AIvAI(create_treeA, depthA, branchA, funcA, create_treeB, depthB, branchB, funcB):
     deckA = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper]
     deckB = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper]
@@ -925,7 +1009,7 @@ def AIvAI(create_treeA, depthA, branchA, funcA, create_treeB, depthB, branchB, f
 
 
 
-AIvAI(create_tree2, 2, 10, eval_b, create_tree2, 2, 2, eval_b)
+AIvAI(create_tree2, 2, 7, eval_c, create_tree2, 2, 7, eval_c)
 
 
 '''

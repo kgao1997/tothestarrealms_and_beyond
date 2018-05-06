@@ -896,21 +896,39 @@ def eval_card(card):
 
 # Attempt at a good eval function. The goal is to achieve the greatest density of good cards in your deck.
 # Evaluate the state from the perspective of the current player
-# TODO: minimax doesn't work if all evaluations are done from the current player's perspective.
+# In ordert to make minimax work, all evaluations are done from p0's perspective (p0 always goes first).
 def eval_c(state):
-    curr_player = state.player_list[state.current_player]
-    opp_player = state.player_list[(state.current_player + 1) % 2]
-    auth_diff = curr_player.authority - opp_player.authority
+    #curr_player = state.player_list[state.current_player]
+    #opp_player = state.player_list[(state.current_player + 1) % 2]
+    p0 = state.player_list[0]
+    p1 = state.player_list[1]
+    auth_diff = p0.authority - p1.authority   # diff in influence (ranges from 0 to 50)
     deck_val = 0
-    for card in curr_player.deck:
+    for card in p0.deck:
         deck_val += eval_card(card)
-    for card in curr_player.discard:
+    for card in p0.discard:
         deck_val += eval_card(card)
-    deck_val /= len(curr_player.deck) + len(curr_player.discard)   # avg value of deck
+    if (len(p0.deck) + len(p0.discard) > 0):
+        deck_val /= (len(p0.deck) + len(p0.discard))   # avg value of deck
+    else:
+        deck_val = 0
     play_val = 0
-    for card in curr_player.in_play:
+    for card in p0.in_play:
         play_val += eval_card(card)   # bonuses for bases in play
-    return auth_diff + deck_val + play_val   # TODO: normalize
+    deck_val_1 = 0
+    for card in p1.deck:
+        deck_val_1 += eval_card(card)
+    for card in p1.discard:
+        deck_val_1 += eval_card(card)
+    if (len(p1.deck) + len(p1.discard) > 0):
+        deck_val_1 /= (len(p1.deck) + len(p1.discard))   # avg value of deck (ranges from 0 to 10)
+    else:
+        deck_val_1 = 0
+    play_val_1 = 0
+    for card in p1.in_play:
+        play_val_1 += eval_card(card)   # bonuses for bases in play (prabably around 0 to 30)
+
+    return auth_diff + (10 * deck_val) + play_val - (10 * deck_val_1) - play_val_1   # TODO: normalize
 
 #print actions
 def print_actions(act_list):
@@ -929,7 +947,8 @@ def print_actions(act_list):
 # is not the same testing we would do as facing the in-game AI. This assumption should still allow us to compare the merits
 # of different AIs, since this will test which types of game states should be favored.
 # After some investigation, the probability of a failed action seems rather small (?)
-# TODO: for minimax to work properly, one player should be fixed to go first, and minimax should be evaluated from that player's perspective
+# NOTE: The first player's turn is randomized. Since the eval function is based from P0's perspective, 
+# P0's turn is minimax (maxmizing value) and P1's turn is maximin (minimizing value).
 def AIvAI(create_treeA, depthA, branchA, funcA, create_treeB, depthB, branchB, funcB):
     deckA = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper]
     deckB = [scout, scout, scout, scout, scout, scout, scout, scout, viper, viper]
@@ -987,7 +1006,7 @@ def AIvAI(create_treeA, depthA, branchA, funcA, create_treeB, depthB, branchB, f
                 break
         if state.current_player == 1:
             treeB = create_treeB(state, depthB, branchB, funcB, None)
-            actions, _ = treeB.minimaxAB(math.inf, -math.inf, math.inf)
+            actions, _ = treeB.maximinAB(math.inf, -math.inf, math.inf)
             for a in actions:
                 try:
                     new_state = exec_action(state, a)
@@ -1009,7 +1028,7 @@ def AIvAI(create_treeA, depthA, branchA, funcA, create_treeB, depthB, branchB, f
 
 
 
-AIvAI(create_tree2, 2, 7, eval_c, create_tree2, 2, 7, eval_c)
+AIvAI(create_tree2, 1, 10, eval_c, create_tree2, 1, 5, eval_c)
 
 
 '''

@@ -896,7 +896,7 @@ def eval_card(card):
 
 # Attempt at a good eval function. The goal is to achieve the greatest density of good cards in your deck.
 # Evaluate the state from the perspective of the current player
-# In ordert to make minimax work, all evaluations are done from p0's perspective (p0 always goes first).
+# In ordert to make minimax work, all evaluations are done from p0's perspective.
 def eval_c(state):
     #curr_player = state.player_list[state.current_player]
     #opp_player = state.player_list[(state.current_player + 1) % 2]
@@ -990,7 +990,6 @@ def AIvAI(create_treeA, depthA, branchA, funcA, create_treeB, depthB, branchB, f
                     #print("NEW STATE")
                     #print_state(new_state)
                     state = new_state
-                    break
                 except ValueError:   
                     # TODO: we tried an action which isn't possible due to RNG. should we continue with the other actions (since there may be good stuff)
                     # or give up on the sequence entirely? (since later actions will probably depend on this one)
@@ -1011,7 +1010,6 @@ def AIvAI(create_treeA, depthA, branchA, funcA, create_treeB, depthB, branchB, f
                 try:
                     new_state = exec_action(state, a)
                     state = new_state
-                    break
                 except ValueError:   
                     # TODO: we tried an action which isn't possible due to RNG. should we continue with the other actions (since there may be good stuff)
                     # or give up on the sequence entirely? (since later actions will probably depend on this one)
@@ -1028,7 +1026,7 @@ def AIvAI(create_treeA, depthA, branchA, funcA, create_treeB, depthB, branchB, f
 
 
 
-AIvAI(create_tree2, 1, 10, eval_c, create_tree2, 1, 5, eval_c)
+AIvAI(create_tree2, 2, 5, eval_c, create_tree2, 2, 5, eval_c)
 
 
 '''

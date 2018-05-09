@@ -647,9 +647,8 @@ def exec_action(state, action):
         for card in curr_player.copied:
             try:
                 curr_player.discard.remove(card)
-                break
             except ValueError:
-                print("copied chip not found in discard!")   # TODO: getting a weird bug where a copied ship is not found in discard
+                print("copied chip not found in discard!")   # getting a weird bug where a copied ship is not found in discard, should be fixed
         curr_player.copied = []
         curr_player.base_dest = 0
         curr_player.ship_top = 0
@@ -806,14 +805,15 @@ def create_tree2(s, d, b, func, moves):
                     pos_actions = list_actions(state)
                     done = True
                     break
-            for a in pos_actions:
-                if a.action_name == ActName.ATTACK:
-                    nextAct = a
-                    move_seq.append(nextAct)
-                    state = exec_action(state, nextAct)
-                    pos_actions = list_actions(state)
-                    done = True
-                    break
+            if not done:
+                for a in pos_actions:
+                    if a.action_name == ActName.ATTACK:
+                        nextAct = a
+                        move_seq.append(nextAct)
+                        state = exec_action(state, nextAct)
+                        pos_actions = list_actions(state)
+                        done = True
+                        break
             if not done:
                 randAct = pos_actions[random.randint(0, len(pos_actions) - 1)]
                 move_seq.append(randAct)
@@ -914,7 +914,7 @@ def eval_c(state):
         deck_val = 0
     play_val = 0
     for card in p0.in_play:
-        play_val += eval_card(card)   # bonuses for bases in play
+        play_val += eval_card(card)   # bonuses for bases in play TODO: bases are probably stronger than landscapes
     deck_val_1 = 0
     for card in p1.deck:
         deck_val_1 += eval_card(card)
@@ -946,7 +946,6 @@ def print_actions(act_list):
 # our system, we might assume that the sequence of actions always leads to the state specified in the game tree. This
 # is not the same testing we would do as facing the in-game AI. This assumption should still allow us to compare the merits
 # of different AIs, since this will test which types of game states should be favored.
-# After some investigation, the probability of a failed action seems rather small (?)
 # NOTE: The first player's turn is randomized. Since the eval function is based from P0's perspective, 
 # P0's turn is minimax (maxmizing value) and P1's turn is maximin (minimizing value).
 def AIvAI(create_treeA, depthA, branchA, funcA, create_treeB, depthB, branchB, funcB):
@@ -1003,7 +1002,7 @@ def AIvAI(create_treeA, depthA, branchA, funcA, create_treeB, depthB, branchB, f
                 print ('Player A wins! PA had {} influence and PB had {} influence'.format(pA_auth, pB_auth))
                 print_state(state)
                 break
-        if state.current_player == 1:
+        elif state.current_player == 1:
             treeB = create_treeB(state, depthB, branchB, funcB, None)
             actions, _ = treeB.maximinAB(math.inf, -math.inf, math.inf)
             for a in actions:

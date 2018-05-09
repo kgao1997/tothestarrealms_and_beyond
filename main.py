@@ -648,7 +648,7 @@ def exec_action(state, action):
             try:
                 curr_player.discard.remove(card)
             except ValueError:
-                print("copied chip not found in discard!")   # getting a weird bug where a copied ship is not found in discard, should be fixed
+                print("copied chip not found in discard!")   # getting a weird bug where a copied ship is not found in discard, should be fixed TODO: not fixed
         curr_player.copied = []
         curr_player.base_dest = 0
         curr_player.ship_top = 0
@@ -758,7 +758,7 @@ def create_tree(s, d, b, func, moves):
     for i in range(0,b):
         #state = copy.deepcopy(s)    I wish I could do this, but the way I wrote the actions means that the cards have to be the same
         state = copy(s)
-        pos_actions = list_actions(state)
+        pos_actions = list_actions(state)   # TODO: there's a bug where pos_actions is empty?
         move_seq = []
         while(all(move.action_name != ActName.END_TURN for move in move_seq)):
             randAct = pos_actions[random.randint(0, len(pos_actions) - 1)]
@@ -781,6 +781,7 @@ def create_tree(s, d, b, func, moves):
 # Attempting to create a smarter game tree by reducing the number of actions
 # that we will search through by random chance.
 # TODO: A lot of strategy can be encoded in the way actions are randomly selected
+# TODO: check if game state is a win/loss state, and stop creating child nodes if so. Also need to edit the eval func to return +- infinity for win/loss TODO TODO
 # Assumption #1: immediately play all cards at the beginning of the turn [possible drawback if you want to scrap a card from your hand]
 # ideas: always attack opponent when possible [possible drawback is that attacking opponent may be favored over attacking base]
 #        always buy a card when possible (?) [may favor buying small-valued cards]
@@ -1025,7 +1026,7 @@ def AIvAI(create_treeA, depthA, branchA, funcA, create_treeB, depthB, branchB, f
 
 
 
-AIvAI(create_tree2, 2, 5, eval_c, create_tree2, 2, 5, eval_c)
+AIvAI(create_tree2, 3, 5, eval_c, create_tree2, 1, 5, eval_c)
 
 
 '''

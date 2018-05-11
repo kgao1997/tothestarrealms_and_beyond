@@ -885,7 +885,7 @@ def eval_function(function):
         return 0
 
 # still pretty arbitrary
-def eval_card(card):
+def eval_card(card, faction_name):
     value = 0
     value += eval_function(card.play_function)
     value += 0.5 * eval_function(card.faction_function)
@@ -893,12 +893,14 @@ def eval_card(card):
     # TODO: do something with faction, maybe have faction-favored decks
     if isinstance(card, Base) or isinstance(card, Landscape):
         value += card.card_shield
+    if card.card_faction == faction_name:
+        value *= 10   # NOTE: pretty arbitrary, as always
     return value
 
 # Attempt at a good eval function. The goal is to achieve the greatest density of good cards in your deck.
 # Evaluate the state from the perspective of the current player
 # In ordert to make minimax work, all evaluations are done from p0's perspective.
-def eval_c(state):
+def eval_c(state, faction_name):
     #curr_player = state.player_list[state.current_player]
     #opp_player = state.player_list[(state.current_player + 1) % 2]
     p0 = state.player_list[0]
@@ -906,30 +908,46 @@ def eval_c(state):
     auth_diff = p0.authority - p1.authority   # diff in influence (ranges from 0 to 50)
     deck_val = 0
     for card in p0.deck:
-        deck_val += eval_card(card)
+        deck_val += eval_card(card, faction_name)
     for card in p0.discard:
-        deck_val += eval_card(card)
+        deck_val += eval_card(card, faction_name)
     if (len(p0.deck) + len(p0.discard) > 0):
         deck_val /= (len(p0.deck) + len(p0.discard))   # avg value of deck
     else:
         deck_val = 0
     play_val = 0
     for card in p0.in_play:
-        play_val += eval_card(card)   # bonuses for bases in play TODO: bases are probably stronger than landscapes
+        play_val += eval_card(card, faction_name)   # bonuses for bases in play TODO: bases are probably stronger than landscapes
     deck_val_1 = 0
     for card in p1.deck:
-        deck_val_1 += eval_card(card)
+        deck_val_1 += eval_card(card, faction_name)
     for card in p1.discard:
-        deck_val_1 += eval_card(card)
+        deck_val_1 += eval_card(card, faction_name)
     if (len(p1.deck) + len(p1.discard) > 0):
         deck_val_1 /= (len(p1.deck) + len(p1.discard))   # avg value of deck (ranges from 0 to 10)
     else:
         deck_val_1 = 0
     play_val_1 = 0
     for card in p1.in_play:
-        play_val_1 += eval_card(card)   # bonuses for bases in play (prabably around 0 to 30)
+        play_val_1 += eval_card(card, faction_name)   # bonuses for bases in play (prabably around 0 to 30)
 
-    return auth_diff + (10 * deck_val) + play_val - (10 * deck_val_1) - play_val_1   # TODO: normalize
+    return auth_diff + (10 * deck_val) + play_val - (10 * deck_val_1) - play_val_1   # NOTE: normalization is arbitrary, as always
+
+# here are eval functions that favor certain factions
+def eval_generic(state):
+    return eval_c(state, None)
+
+def eval_blob(state):
+    return eval_c(state, Faction.BLOB)
+
+def eval_trade(state):
+    return eval_c(state, Faction.TRADE_FED)
+
+def eval_mach(state):
+    return eval_c(state, Faction.MACH_CULT)
+
+def eval_star(state):
+    return eval_c(state, Faction.STAR_EMP)
 
 #print actions
 def print_actions(act_list):
@@ -1025,16 +1043,16 @@ def AIvAI(create_treeA, depthA, branchA, funcA, create_treeB, depthB, branchB, f
                 break
 
 
-
-AIvAI(create_tree2, 3, 5, eval_c, create_tree2, 1, 5, eval_c)
-
-
 '''
+AIvAI(create_tree2, 1, 50, eval_blob, create_tree2, 1, 50, eval_generic)
+'''
+
+
 #p0 = Player(authority = 50, deck = [], in_play = [blob_world, trading_post, barter_world, defense_center, patrol_mech, recycling_station], hand = [scout, scout, viper, corvette, cutter], combat = 0, trade = 0, discard = [scout, scout, scout, scout, scout, scout, viper], num_to_discard = 0, used = [])
 p0 = Player(authority = 50, deck = [], in_play = [], hand = [scout, scout, viper, scout, scout, corvette], combat = 0, trade = 0, discard = [], num_to_discard = 0, used = [])
 p1 = Player(authority = 50, deck = [scout, scout, scout, scout, scout, viper, viper], in_play = [], hand = [], combat = 0, trade = 0, discard = [scout, scout, scout, trading_post], num_to_discard = 0)
 state_example = Game(curr_player=0, player_list=[p0, p1], trade_row=[explorer, battle_pod, supply_bot, stealth_needle, trade_escort, trade_bot], deck=[])
-
+'''
 print_state(state_example)
 #valid_functions(p0)
 print_actions(list_actions(state_example))
@@ -1052,7 +1070,7 @@ print_actions(list_actions(new_state))
 #print_actions(list_actions(new_state))
 '''
 
-'''
+
 t = create_treeB(state_example, d= 2, b= 10, func= eval_b, moves= None)   # can modify: how we create tree, depth, b-factor, eval-func
 actions,val = (t.minimaxAB(10, -math.inf, math.inf))
 print_actions(actions)
@@ -1060,4 +1078,4 @@ print ('optimal val of tree is ' + str(val))
 #print_state(t.value)
 #for s in t.children:
 #    print_state(s.value)
-'''   
+ 

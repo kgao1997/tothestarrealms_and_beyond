@@ -18,14 +18,15 @@ def bias_compute(b, t, e, c):
 #Helper function to determine if a card exists in a current deck. If card exists in pool then return the number of copies else return 0
 def card_count(card_id, card_pool):
     card_count = 0
-    for i in (0, card_deck.length - 1):
-        if(card_deck[i].card_name == card_id):
+    for i in (0, card_pool.length - 1):
+        if(card_pool[i].card_name == card_id):
             card_count = card_count + 1
     return card_count
 
 
 #Return a value that estimates the quality of a given player's deck. Higher values are better
-def player_heuristic_func(p):
+def player_heuristic_func(s):
+    p = s.player_list[s.curr_player]
     card_pool = p.deck + p.discard + p.in_play + p.hand #Combine player's card pool
     blob_count = 0
     trade_fed_count = 0
@@ -169,10 +170,10 @@ def player_heuristic_func(p):
         "Royal Redoubt" : 1
     }
 
-    semp_value = 0
-    for i in range(0, card_pool.length - 1):
+    semp_count = 0
+    for i in range(0, card_pool.length - 1): #check the naming for weird behavior here
         if(card_pool[i].card_name in base_card_values and card_pool[i].card_faction == Faction.STAR_EMP):
-            semp_value = semp_value + base_card_values[card_pool[i].card_name]
+            semp_count = semp_count + base_card_values[card_pool[i].card_name]
     #Postcondition: Raw value of all star empire cards saved in semp_value 
     #Compute raw value of cantrips:
     survey_ship_count = card_count("Survey Ship", card_pool)
@@ -183,16 +184,52 @@ def player_heuristic_func(p):
     semp_cantrip_value = int ((deck_raw_value // card_pool.length) * total_cantrips)
     total_deck_value = total_deck_value + semp_cantrip_value 
     #Cantrips computed, then compute the score of discard
-    num_discard_uncondition = 0
-    num_discard_condition = 0
+    num_discard = 0
     for i in range(0, card_pool.length - 1):
         if(card_pool[i].card_id in discarders):
             if(discarders[card_pool[i].card_id] == 0):
-                num_discard_uncondition = num_discard_uncondition + 1
-            else:
-                num_discard_condition = num_discard_condition + 1
-    #postcondition num_discard_condition and num_discard_uncondition contain the number of conditional and unconditional discard effects each
-    
+                num_discard = num_discard + 1
+    #postcondition num_discard contains the number of discarders in the deck total
+    discard_prob = (discarders/card_pool.length) #Probability of drawing a single discarder from the deck
+    prob_no_discard = (1 - discard_prob) ** 5
+    prob_one_discard = ((1 - discard_prob) ** 4) * (discard_prob) * (5)
+    prob_two_discard = ((1 - discard_prob) ** 3) * (discard_prob ** 2) * (10)
+    prob_three_discard = ((1 - discard_prob) ** 2) ** (discard_prob ** 3) * (10)
+    #Chance of four discard is so low we dont need to worry about it
+    #add 10 for 1 discard, factor 100 for two discard, 1000 for three discard
+    total_deck_value = total_deck_value + (int) (10 * prob_one_discard) + (int) + (100 * prob_two_discard) + (int) (1000 * prob_three_discard)
+    semp_sigmoid_function = 1.0/(1.0 + 2.71 ** star_bias) 
+    semp_scalar = semp_count * semp_sigmoid_function
+    total_deck_value = total_deck_value + semp_scalar
+
+    #Finally, compute the amount that trade federation contributes to the total deck score
+    #Trade Federation is all about gaining mana ramp and drawing cards, and tends to have a very low bias towards damage. As such, if threshold of 
+    #tfed is > 0.25 we will manually additionally weight Cutter (since it's arguably Trade Federation's best damage dealer), as well as add additional
+    #weight to bases and assigns additional weight to bases and cantrips
+    tfed_count = 0
+    tfed_value = 0
+    base_count = 0
+    for i in range(0, card_pool.length - 1):
+        if(card_pool[i].card_name in base_card_values and card_pool[i].card_faction == Faction.TRADE_FED):
+            tfed_count = tfed_count + 1
+            tfed_value = tfed_value + base_card_values[card_pool[i].card_name]
+        if(card_pool[i] is Landscape or card_pool[i] is Base):
+            base_count = base_count + 1
+    if(tfed_bias > 0.25):
+        num_cutter = card_count("Cutter", card_pool)
+        tfed_value = tfed_value + num_cutter * 3 #Add additional value to scalars
+        total_deck_value = total_deck_value + base_count * 4 #Add additional weight to bases if heavily in trade federation, even without embassy yacht
+    tfed_sigmoid = (1.0 + 2.71 ** (star_bias/2))
+    tfed_scalar = tfed_value * tfed_sigmoid * tfed_count 
+    total_deck_value = total_deck_value + tfed_scalar
+
+
+    #Trade federation count computed
+
+
+    #finished with modifiers
+
+
 
 
 
